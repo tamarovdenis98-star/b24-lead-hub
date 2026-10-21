@@ -1,0 +1,185 @@
+{
+  "active": true,
+  "connections": {
+    "Force failure?": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Forced failure",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Prepare call",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Prepare call": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "b24_call",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Force failure?",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "b24_call": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Respond",
+            "type": "main"
+          }
+        ]
+      ]
+    }
+  },
+  "name": "[B24HUB] 90 test harness",
+  "nodes": [
+    {
+      "id": "fa04a3f1-0593-531f-b3ba-c220d632a015",
+      "name": "Force failure?",
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "563d5dbb-f5b3-5639-bf16-214b0f6bcd56",
+              "leftValue": "={{ $json.body.fail === true }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        220,
+        300
+      ],
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2
+    },
+    {
+      "id": "47339f8e-e587-55d9-8326-fd7facbf2dbb",
+      "name": "Forced failure",
+      "parameters": {
+        "errorMessage": "={{ 'Forced failure for error-handler test: ' + ($json.body.note ?? '') }}"
+      },
+      "position": [
+        440,
+        160
+      ],
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1
+    },
+    {
+      "id": "bb46be35-fc7a-5436-9e10-cc7dbef37e43",
+      "name": "Prepare call",
+      "parameters": {
+        "jsCode": "const b = $json.body;\nreturn [{ json: { method: b.method, params: b.params ?? {}, max_attempts: b.max_attempts,\n                  caller_workflow: $workflow.name, caller_execution_id: $execution.id } }];\n"
+      },
+      "position": [
+        440,
+        380
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "id": "57b97617-91e0-52f9-ba12-81d0458753f2",
+      "name": "Respond",
+      "parameters": {
+        "options": {},
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ execution_id: $execution.id, ...$json }) }}"
+      },
+      "position": [
+        880,
+        380
+      ],
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4
+    },
+    {
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "B24HUB Intake Secret"
+        }
+      },
+      "id": "bfb7534f-cea5-5076-99db-1fd9e7bb044a",
+      "name": "Webhook",
+      "parameters": {
+        "authentication": "headerAuth",
+        "httpMethod": "POST",
+        "options": {},
+        "path": "b24hub/test/b24-call",
+        "responseMode": "responseNode"
+      },
+      "position": [
+        0,
+        300
+      ],
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "webhookId": "7c6215f1-e2de-5bfd-bc4f-8534585f690d"
+    },
+    {
+      "id": "3c7394f4-991d-5f51-bb57-da053e19cb52",
+      "name": "b24_call",
+      "parameters": {
+        "mode": "each",
+        "options": {
+          "waitForSubWorkflow": true
+        },
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "@name:[B24HUB] lib b24_call"
+        }
+      },
+      "position": [
+        660,
+        380
+      ],
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1
+    }
+  ],
+  "settings": {
+    "errorWorkflow": "@name:[B24HUB] 99 error handler",
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all"
+  }
+}

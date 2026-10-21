@@ -1,0 +1,82 @@
+{
+  "active": false,
+  "connections": {
+    "Simulate": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Respond",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Simulate",
+            "type": "main"
+          }
+        ]
+      ]
+    }
+  },
+  "name": "[B24HUB] 91 b24 mock",
+  "nodes": [
+    {
+      "id": "8a219807-dbdf-5506-b989-521c8ff459b2",
+      "name": "Respond",
+      "parameters": {
+        "options": {
+          "responseCode": "={{ $json.status }}"
+        },
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json.body) }}"
+      },
+      "position": [
+        440,
+        300
+      ],
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4
+    },
+    {
+      "id": "3af75128-e3d1-530c-bb20-a0a4f37eadd2",
+      "name": "Simulate",
+      "parameters": {
+        "jsCode": "// Deterministic Bitrix24 failure simulator, used by tests to exercise lib b24_call retries.\n//   qle.<N>.<run>.json  -> first N calls: 503 QUERY_LIMIT_EXCEEDED, then success\n//   otl.<N>.<run>.json  -> first N calls: 429 OPERATION_TIME_LIMIT (operating_reset_at = now+3s)\n//   err200.<run>.json   -> HTTP 200 with {\"error\":\"ACCESS_DENIED\"} (error hidden in a 200)\n//   ok.<run>.json       -> success\nconst m = String($json.params.method ?? '').replace(/\\.json$/, '');\nconst [kind, nStr] = m.split('.');\nconst stat = $getWorkflowStaticData('global');\nstat.calls = stat.calls ?? {};\nconst seen = (stat.calls[m] = (stat.calls[m] ?? 0) + 1);\nconst now = Date.now() / 1000;\nconst time = { start: now, finish: now + 0.01, duration: 0.01, processing: 0.005, operating: 1.5, operating_reset_at: Math.floor(now + 3) };\nconst n = Number(nStr ?? 0);\nlet status = 200, body = { result: { echo: $json.body ?? null, call: seen }, time };\nif (kind === 'qle' && seen <= n) { status = 503; body = { error: 'QUERY_LIMIT_EXCEEDED', error_description: 'Too many requests', time }; }\nif (kind === 'otl' && seen <= n) { status = 429; body = { error: 'OPERATION_TIME_LIMIT', error_description: 'Method is blocked due to operation time limit.', time }; }\nif (kind === 'err200') { body = { error: 'ACCESS_DENIED', error_description: 'Access denied (mock)', time }; }\nreturn [{ json: { status, body } }];\n"
+      },
+      "position": [
+        220,
+        300
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "id": "40a4b687-f36e-5221-97f8-59ece4c7fe5b",
+      "name": "Webhook",
+      "parameters": {
+        "httpMethod": "POST",
+        "options": {},
+        "path": "b24hub/mock/:method",
+        "responseMode": "responseNode"
+      },
+      "position": [
+        0,
+        300
+      ],
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "webhookId": "082abe23-4e21-5ef6-9879-d9661113b816"
+    }
+  ],
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "none"
+  }
+}
