@@ -1,0 +1,185 @@
+{
+  "active": true,
+  "connections": {
+    "App event": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Parse",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Apply": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Valid?",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Parse": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Apply",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Valid?": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Respond 200",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Respond 403",
+            "type": "main"
+          }
+        ]
+      ]
+    }
+  },
+  "name": "[B24HUB] 05c app events",
+  "nodes": [
+    {
+      "id": "5ccd2965-7d26-546b-996f-e44fc742fee8",
+      "name": "App event",
+      "parameters": {
+        "httpMethod": "POST",
+        "options": {},
+        "path": "b24hub/app/events",
+        "responseMode": "responseNode"
+      },
+      "position": [
+        0,
+        300
+      ],
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "webhookId": "1eadf08d-e4b7-5146-8173-48e19ede8628"
+    },
+    {
+      "credentials": {
+        "postgres": {
+          "name": "B24HUB Postgres"
+        }
+      },
+      "id": "d7727a5e-b433-5b36-ac0a-dad717f931dc",
+      "name": "Apply",
+      "parameters": {
+        "operation": "executeQuery",
+        "options": {
+          "queryReplacement": "={{ [$json.event, $json.token ?? '', $json.member_id ?? ''] }}"
+        },
+        "query": "WITH ok AS (\n  SELECT member_id FROM b24_app WHERE status = 'installed' AND application_token = $2 AND member_id = $3\n), u AS (\n  UPDATE b24_app SET status = 'uninstalled', access_token = '', refresh_token = '', refresh_lock_until = NULL, updated_at = now()\n   WHERE member_id IN (SELECT member_id FROM ok) AND $1 = 'ONAPPUNINSTALL'\n  RETURNING member_id\n)\nSELECT EXISTS (SELECT 1 FROM ok) AS valid, (SELECT count(*) FROM u) AS uninstalled"
+      },
+      "position": [
+        440,
+        300
+      ],
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6
+    },
+    {
+      "id": "aaf7c511-c5ca-5b81-8177-dec288fc1916",
+      "name": "Parse",
+      "parameters": {
+        "jsCode": "// ONAPPUNINSTALL carries no OAuth tokens: application_token is the only proof it comes from Bitrix24.\nconst b = $json.body ?? {};\nconst g = (nested, flat) => nested ?? b[flat] ?? null;\nreturn [{ json: { event: String(b.event ?? '').toUpperCase(), token: g(b.auth?.application_token, 'auth[application_token]'),\n                  member_id: g(b.auth?.member_id, 'auth[member_id]') } }];\n"
+      },
+      "position": [
+        220,
+        300
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "id": "809bbfa7-fc30-531e-a510-c3e298136907",
+      "name": "Respond 200",
+      "parameters": {
+        "options": {
+          "responseCode": 200
+        },
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: true, uninstalled: Number($json.uninstalled) }) }}"
+      },
+      "position": [
+        880,
+        200
+      ],
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4
+    },
+    {
+      "id": "2c54d98d-4f51-514f-85a3-5212deaad9a3",
+      "name": "Respond 403",
+      "parameters": {
+        "options": {
+          "responseCode": 403
+        },
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: false }) }}"
+      },
+      "position": [
+        880,
+        400
+      ],
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4
+    },
+    {
+      "id": "6c3026de-aae4-5edc-9622-ec92008d1c6a",
+      "name": "Valid?",
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "39bd73a8-e844-516d-94e9-b1cf2e16131a",
+              "leftValue": "={{ $json.valid }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        660,
+        300
+      ],
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2
+    }
+  ],
+  "settings": {
+    "errorWorkflow": "@name:[B24HUB] 99 error handler",
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all"
+  }
+}

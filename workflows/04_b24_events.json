@@ -359,7 +359,7 @@
         "options": {
           "queryReplacement": "={{ [JSON.stringify({ event: $json.event, deal_id: $json.deal_id, domain: $json.domain }), $json.token ?? ''] }}"
         },
-        "query": "SELECT $1::jsonb || jsonb_build_object(\n  'valid', coalesce((SELECT outbound_token IS NOT NULL AND outbound_token = $2 FROM b24_auth WHERE id = 1), false)) AS ev"
+        "query": "-- Accepted: the outbound webhook's token, or the installed local app's application_token (event.bind).\nSELECT $1::jsonb || jsonb_build_object('valid',\n  coalesce((SELECT outbound_token IS NOT NULL AND outbound_token = $2 FROM b24_auth WHERE id = 1), false)\n  OR EXISTS (SELECT 1 FROM b24_app WHERE status = 'installed' AND application_token = $2)) AS ev"
       },
       "position": [
         440,
