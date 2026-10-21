@@ -1,0 +1,503 @@
+{
+  "active": true,
+  "connections": {
+    "Bitrix24 event": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Parse event",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Check update": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Close SLA",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Decide": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Responded?",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Find open SLA": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Ours and open?",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Ours and open?": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Prepare deal.get",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Parse event": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Verify token",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Prepare SLA update": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "b24: close SLA item",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Prepare deal.get": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "b24: deal.get",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Respond 200": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Find open SLA",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Responded?": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Prepare SLA update",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Token ok?": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Respond 200",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Respond 403",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Verify token": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Token ok?",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "b24: close SLA item": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Check update",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "b24: deal.get": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Decide",
+            "type": "main"
+          }
+        ]
+      ]
+    }
+  },
+  "name": "[B24HUB] 04 b24 events",
+  "nodes": [
+    {
+      "id": "0eda21ab-9b33-5a02-b5fe-e5c3066c4ea1",
+      "name": "Bitrix24 event",
+      "parameters": {
+        "httpMethod": "POST",
+        "options": {},
+        "path": "b24hub/b24-events",
+        "responseMode": "responseNode"
+      },
+      "position": [
+        0,
+        300
+      ],
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "webhookId": "838ff1b0-3d0e-5382-90a0-deaccb371952"
+    },
+    {
+      "id": "7ee53001-f13b-5f77-addb-b048048aedc3",
+      "name": "Check update",
+      "parameters": {
+        "jsCode": "if (!$json.ok) throw new Error(`crm.item.update (SLA item) failed: ${$json.error_code} ${$json.error_description ?? ''}`);\nreturn [{ json: { ok: true } }];\n"
+      },
+      "position": [
+        2860,
+        40
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "credentials": {
+        "postgres": {
+          "name": "B24HUB Postgres"
+        }
+      },
+      "id": "b265cd0b-951a-5495-ad7a-147d46545333",
+      "name": "Close SLA",
+      "parameters": {
+        "operation": "executeQuery",
+        "options": {
+          "queryReplacement": "={{ [$('Decide').first().json.inbox_id, $('Decide').first().json.status, $('Decide').first().json.deal_stage, $('Decide').first().json.response_min, $execution.id] }}"
+        },
+        "query": "WITH u AS (\n  UPDATE assignments SET sla_status = $2, sla_closed_at = now()\n   WHERE inbox_id = $1 AND sla_closed_at IS NULL RETURNING inbox_id, deal_id\n)\nINSERT INTO lead_events (inbox_id, deal_id, step, detail, execution_id)\nSELECT inbox_id, deal_id, 'sla_closed', jsonb_build_object('status', $2, 'deal_stage', $3, 'response_min', $4::int, 'by', 'ONCRMDEALUPDATE'), $5 FROM u\nRETURNING inbox_id"
+      },
+      "position": [
+        3080,
+        40
+      ],
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6
+    },
+    {
+      "id": "232c9132-2b58-529a-a73e-13f7a6806a2e",
+      "name": "Decide",
+      "parameters": {
+        "jsCode": "// The event says only \"deal changed\"; the deal is re-read to decide. First response = the deal left\n// its first stage (NEW / C<n>:NEW). Other edits (comments, fields) keep the SLA running.\nconst a = $('Find open SLA').first().json;\nconst r = $json;\nif (!r.ok) throw new Error(`crm.deal.get ${a.deal_id} failed: ${r.error_code} ${r.error_description ?? ''}`);\nconst stage = String(r.result.STAGE_ID ?? '');\nconst responded = !(stage === 'NEW' || /^C\\d+:NEW$/.test(stage));\nconst now = Date.now();\nconst status = a.sla_status === 'breached' || now > new Date(a.sla_due).getTime() ? 'breached' : 'met';\nreturn [{ json: { ...a, responded, deal_stage: stage, status,\n                  response_min: Math.round((now - new Date(a.assigned_at).getTime()) / 60000) } }];\n"
+      },
+      "position": [
+        1980,
+        120
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "credentials": {
+        "postgres": {
+          "name": "B24HUB Postgres"
+        }
+      },
+      "id": "a9c79448-7ed3-5272-8c53-4605aa8b0287",
+      "name": "Find open SLA",
+      "parameters": {
+        "operation": "executeQuery",
+        "options": {
+          "queryReplacement": "={{ [$json.ev.deal_id ?? 0, $json.ev.event] }}"
+        },
+        "query": "-- Only deals the hub created and whose SLA is not closed yet; everything else is ignored.\nSELECT a.inbox_id, a.deal_id, a.sla_item_id, a.sla_status, a.sla_due, a.assigned_at,\n       (SELECT value FROM settings WHERE key = 'sla_entity_type_id') AS sla_type,\n       (SELECT value FROM settings WHERE key = 'sla_stage_success')  AS stage_success,\n       (SELECT value FROM settings WHERE key = 'sla_stage_fail')     AS stage_fail\n  FROM assignments a\n WHERE a.deal_id = $1 AND a.sla_closed_at IS NULL AND $2 = 'ONCRMDEALUPDATE'"
+      },
+      "position": [
+        1100,
+        200
+      ],
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6
+    },
+    {
+      "id": "f7fdb481-d909-5f63-9e22-c6a036b37b12",
+      "name": "Ours and open?",
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "079e064e-ceca-5772-be34-ee67aeff68bb",
+              "leftValue": "={{ $json.inbox_id !== undefined }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        1320,
+        200
+      ],
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2
+    },
+    {
+      "id": "e0ba97f9-2b0c-593f-9a6d-08d9a020a268",
+      "name": "Parse event",
+      "parameters": {
+        "jsCode": "// Outbound webhook posts application/x-www-form-urlencoded: event, data[FIELDS][ID], auth[application_token].\nconst b = $json.body ?? {};\nconst pick = (nested, flat) => nested ?? b[flat] ?? null;\nreturn [{ json: {\n  event: String(b.event ?? '').toUpperCase(),\n  deal_id: Number(pick(b.data?.FIELDS?.ID, 'data[FIELDS][ID]')) || null,\n  token: pick(b.auth?.application_token, 'auth[application_token]'),\n  domain: pick(b.auth?.domain, 'auth[domain]'),\n  ts: b.ts ?? null,\n} }];\n"
+      },
+      "position": [
+        220,
+        300
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "id": "56dfb347-85d0-59bd-86ae-53f34c35e3a8",
+      "name": "Prepare SLA update",
+      "parameters": {
+        "jsCode": "const d = $json;\nreturn [{ json: { method: 'crm.item.update', params: { entityTypeId: Number(d.sla_type), id: d.sla_item_id,\n  fields: { stageId: d.status === 'met' ? d.stage_success : d.stage_fail } },\n  caller_workflow: $workflow.name, caller_execution_id: $execution.id } }];\n"
+      },
+      "position": [
+        2420,
+        40
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "id": "0b9cce44-0d0f-5bc0-ab5e-1253797482ff",
+      "name": "Prepare deal.get",
+      "parameters": {
+        "jsCode": "return [{ json: { method: 'crm.deal.get', params: { id: $json.deal_id }, caller_workflow: $workflow.name, caller_execution_id: $execution.id } }];\n"
+      },
+      "position": [
+        1540,
+        120
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "id": "e018a811-ab16-55bd-ad99-6c9f908f2dcc",
+      "name": "Respond 200",
+      "parameters": {
+        "options": {
+          "responseCode": 200
+        },
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: true }) }}"
+      },
+      "position": [
+        880,
+        200
+      ],
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4
+    },
+    {
+      "id": "a11b7ded-f409-5ab9-8d32-e545eba02b8a",
+      "name": "Respond 403",
+      "parameters": {
+        "options": {
+          "responseCode": 403
+        },
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: false, error: 'invalid application_token' }) }}"
+      },
+      "position": [
+        880,
+        460
+      ],
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4
+    },
+    {
+      "id": "c46d05ed-fc0c-54ed-997a-1477160f3b4b",
+      "name": "Responded?",
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "29332ee2-962e-5da6-928f-8220ee9ba09a",
+              "leftValue": "={{ $json.responded }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        2200,
+        120
+      ],
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2
+    },
+    {
+      "id": "c3db4a44-9711-5b24-8924-020b6fad2f88",
+      "name": "Token ok?",
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "7df90014-8599-5cbd-8b44-e865ade638cb",
+              "leftValue": "={{ $json.ev.valid }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        660,
+        300
+      ],
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2
+    },
+    {
+      "credentials": {
+        "postgres": {
+          "name": "B24HUB Postgres"
+        }
+      },
+      "id": "e523f27f-daf3-5ae0-9768-df1f2cd654d6",
+      "name": "Verify token",
+      "parameters": {
+        "operation": "executeQuery",
+        "options": {
+          "queryReplacement": "={{ [JSON.stringify({ event: $json.event, deal_id: $json.deal_id, domain: $json.domain }), $json.token ?? ''] }}"
+        },
+        "query": "SELECT $1::jsonb || jsonb_build_object(\n  'valid', coalesce((SELECT outbound_token IS NOT NULL AND outbound_token = $2 FROM b24_auth WHERE id = 1), false)) AS ev"
+      },
+      "position": [
+        440,
+        300
+      ],
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6
+    },
+    {
+      "id": "5681218e-dff0-5b78-a794-29812a7227f5",
+      "name": "b24: close SLA item",
+      "parameters": {
+        "mode": "each",
+        "options": {
+          "waitForSubWorkflow": true
+        },
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "@name:[B24HUB] lib b24_call"
+        }
+      },
+      "position": [
+        2640,
+        40
+      ],
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1
+    },
+    {
+      "id": "34d827c9-2d27-527b-a366-ae99f596cb09",
+      "name": "b24: deal.get",
+      "parameters": {
+        "mode": "each",
+        "options": {
+          "waitForSubWorkflow": true
+        },
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "@name:[B24HUB] lib b24_call"
+        }
+      },
+      "position": [
+        1760,
+        120
+      ],
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1
+    }
+  ],
+  "settings": {
+    "errorWorkflow": "@name:[B24HUB] 99 error handler",
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all"
+  }
+}
