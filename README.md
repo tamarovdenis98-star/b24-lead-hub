@@ -12,7 +12,9 @@
 | `[B24HUB] 02 process` | Every 15 s: claims up to 10 inbox rows with `FOR UPDATE SKIP LOCKED`, runs each through `02a`, failed → backoff 1/2/4/8 min, 5 attempts. |
 | `[B24HUB] 02a process lead` | Normalize (E.164, e-mail, INN checksum) → per-client lock → DaData (cached) → one lookup batch (`crm.duplicate.findbycomm`, company by INN, own deal by `ORIGIN_ID`) → routing (`route_lead()`: own client → own manager, rules, least loaded) → one create batch: company + requisite + contact + deal + task + SLA item (`crm.item.add`) + timeline comment. Re-runs repair a half-created lead instead of duplicating it. |
 | `[B24HUB] 03 sla watcher` | Every minute: overdue SLAs → `im.notify.system.add` to manager and head of sales, SLA item → «SLA нарушен», one Telegram digest. Dry-run switch, ≤10 escalations per run, breaker for mass overdue ([ADR 0008](docs/adr/0008-sla-watcher-safety.md)). |
-| `[B24HUB] 04 b24 events` | Outbound webhook `ONCRMDEALUPDATE`: `auth[application_token]` check (403), re-reads the deal with `crm.deal.get`, closes the SLA as met / breached. |
+| `[B24HUB] 04 b24 events` | `ONCRMDEALUPDATE` (push): `auth[application_token]` check (403), re-reads the deal with `crm.deal.get`, closes the SLA via `lib sla_close`. |
+| `[B24HUB] 04b deal poller` | Safety net every minute: open SLAs → `crm.deal.list` (`@ID`, `!STAGE_ID: NEW`) → `lib sla_close`. Status by `MOVED_TIME` ([ADR 0009](docs/adr/0009-deal-events-and-poller.md)). |
+| `[B24HUB] lib sla_close` | The only place an SLA is closed: met / breached, SLA item stage, journal. |
 | `[B24HUB] 99 error handler` | Error Workflow for all of the above: `errors` table + Telegram alert with a link to the execution. |
 | `[B24HUB] 90 test harness`, `91 b24 mock` | Test entry point for the lib, and a deterministic Bitrix24 failure simulator (inactive by default). |
 

@@ -134,3 +134,16 @@ per-worker processing on 1 vCPU, not the Bitrix24 limit.
 | `ONCRMDEALADD` | ignored | — |
 
 Test deals were removed afterwards (`cleanup_demo.py --keep-deals`, 56 entities); the portal holds the 40 demo deals.
+
+### Endpoint check and fallback (`04` reachability, `04b deal poller`)
+The outbound-webhook form on the portal kept spinning on save. Checked on our side:
+`04` active; POST answers in 0.40–0.63 s (first cold call 3.0 s), 200 with a valid token, 403 without,
+404 on GET/HEAD; VPS: CPU 90% idle, load 0.32, 965 MB RAM available, no OOM, n8n not restarted since 13.10.
+None of the requests to `04` came from Bitrix24 while the form was saving.
+
+| Case (4 test deals) | Result | Execution |
+|---|---|---|
+| deal moved to PREPARATION, no event | poller closes `met`, `responded_at` = `MOVED_TIME` | 2756 |
+| overdue, already escalated, moved to EXECUTING | poller closes `breached` | 2756 |
+| deal moved + `ONCRMDEALUPDATE` | closed by `04` through `lib sla_close`; the poller does not close it again | 2755 |
+| deal left in NEW | untouched | — |
