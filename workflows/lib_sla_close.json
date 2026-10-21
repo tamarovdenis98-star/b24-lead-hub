@@ -1,0 +1,239 @@
+{
+  "active": true,
+  "connections": {
+    "Check update": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Close SLA",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Decide status": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "b24: SLA item stage",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Load SLA": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Still open?",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Still open?": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Decide status",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Already closed",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "When called": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Load SLA",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "b24: SLA item stage": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Check update",
+            "type": "main"
+          }
+        ]
+      ]
+    }
+  },
+  "name": "[B24HUB] lib sla_close",
+  "nodes": [
+    {
+      "id": "cb39d057-9980-567f-afc3-c79c2635bada",
+      "name": "Already closed",
+      "parameters": {
+        "jsCode": "return [{ json: { closed: false, reason: 'no open SLA for this deal' } }];\n"
+      },
+      "position": [
+        660,
+        400
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "id": "b87ca04d-0a95-52d5-b78b-73812019f6ec",
+      "name": "Check update",
+      "parameters": {
+        "jsCode": "const d = $('Decide status').first().json;\nif (!$json.ok) throw new Error(`crm.item.update (SLA item ${d.sla_item_id}) failed: ${$json.error_code} ${$json.error_description ?? ''}`);\nreturn [{ json: d }];\n"
+      },
+      "position": [
+        1100,
+        220
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "credentials": {
+        "postgres": {
+          "name": "B24HUB Postgres"
+        }
+      },
+      "id": "4bb039f5-b9a7-5b56-adba-a8d2db73a92c",
+      "name": "Close SLA",
+      "parameters": {
+        "operation": "executeQuery",
+        "options": {
+          "queryReplacement": "={{ [$json.inbox_id, $json.status, $json.deal_stage, $json.response_min, $json.responded_at, $json.closed_by, $json.caller_execution_id ?? $execution.id] }}"
+        },
+        "query": "WITH u AS (\n  UPDATE assignments SET sla_status = $2, sla_closed_at = now()\n   WHERE inbox_id = $1 AND sla_closed_at IS NULL RETURNING inbox_id, deal_id\n)\nINSERT INTO lead_events (inbox_id, deal_id, step, detail, execution_id)\nSELECT inbox_id, deal_id, 'sla_closed', jsonb_build_object('status', $2, 'deal_stage', $3, 'response_min', $4::int,\n       'responded_at', $5::text, 'by', $6), $7 FROM u\nRETURNING inbox_id, $2 AS status"
+      },
+      "position": [
+        1320,
+        220
+      ],
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6
+    },
+    {
+      "id": "da294141-cd48-5ccf-962c-dd4f55ac41a3",
+      "name": "Decide status",
+      "parameters": {
+        "jsCode": "// met = the deal left its first stage before the deadline (by MOVED_TIME, not by when we noticed).\nconst s = $json.s;\nconst at = new Date(s.responded_at).getTime();\nconst status = at <= new Date(s.sla_due).getTime() ? 'met' : 'breached';\nreturn [{ json: { ...s, status, response_min: Math.round((at - new Date(s.assigned_at).getTime()) / 60000),\n  method: 'crm.item.update', params: { entityTypeId: Number(s.sla_type), id: s.sla_item_id,\n    fields: { stageId: status === 'met' ? s.stage_success : s.stage_fail } },\n  caller_workflow: $workflow.name } }];\n"
+      },
+      "position": [
+        660,
+        220
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "credentials": {
+        "postgres": {
+          "name": "B24HUB Postgres"
+        }
+      },
+      "id": "2d9695ac-c48d-5cf9-a87c-ccb7da825a40",
+      "name": "Load SLA",
+      "parameters": {
+        "operation": "executeQuery",
+        "options": {
+          "queryReplacement": "={{ [JSON.stringify($json), $json.deal_id] }}"
+        },
+        "query": "-- Contract: one item {deal_id, deal_stage, responded_at, closed_by, caller_execution_id}.\nSELECT $1::jsonb || jsonb_build_object(\n         'inbox_id', a.inbox_id, 'sla_item_id', a.sla_item_id, 'sla_due', a.sla_due, 'assigned_at', a.assigned_at,\n         'sla_type', (SELECT value FROM settings WHERE key = 'sla_entity_type_id'),\n         'stage_success', (SELECT value FROM settings WHERE key = 'sla_stage_success'),\n         'stage_fail', (SELECT value FROM settings WHERE key = 'sla_stage_fail')) AS s\n  FROM assignments a\n WHERE a.deal_id = $2 AND a.sla_closed_at IS NULL"
+      },
+      "position": [
+        220,
+        300
+      ],
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6
+    },
+    {
+      "id": "365f5204-9612-5494-8c92-aa4b883cd1be",
+      "name": "Still open?",
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "0b8c061e-8cdd-5a36-92b8-1be1fa4ff120",
+              "leftValue": "={{ $json.s !== undefined }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        440,
+        300
+      ],
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2
+    },
+    {
+      "id": "c8a2329a-f54f-576e-b767-c75005413b6f",
+      "name": "When called",
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "position": [
+        0,
+        300
+      ],
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1
+    },
+    {
+      "id": "3cfdc7c1-8902-5318-8dff-5816d6c1aec0",
+      "name": "b24: SLA item stage",
+      "parameters": {
+        "mode": "each",
+        "options": {
+          "waitForSubWorkflow": true
+        },
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "@name:[B24HUB] lib b24_call"
+        }
+      },
+      "position": [
+        880,
+        220
+      ],
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1
+    }
+  ],
+  "settings": {
+    "errorWorkflow": "@name:[B24HUB] 99 error handler",
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all"
+  }
+}
