@@ -1,0 +1,53 @@
+# Self-contained stack: `cp .env.example .env && docker compose up -d`
+# On the shared VPS add the override: -f docker-compose.yml -f docker-compose.vps.yml
+name: b24hub
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    command:
+      - postgres
+      - -c
+      - shared_buffers=64MB
+      - -c
+      - work_mem=4MB
+      - -c
+      - max_connections=40
+      - -c
+      - log_min_duration_statement=500
+    ports:
+      - "127.0.0.1:${POSTGRES_HOST_PORT:-55432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # One-shot migration runner: applies sql/*.sql in order, tracks them in schema_migrations.
+  migrate:
+    image: postgres:16-alpine
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGHOST: postgres
+      PGDATABASE: ${POSTGRES_DB}
+      PGUSER: ${POSTGRES_USER}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      APP_DB_USER: ${APP_DB_USER}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD}
+    volumes:
+      - ./sql:/sql:ro
+      - ./scripts/migrate.sh:/migrate.sh:ro
+    entrypoint: ["sh", "/migrate.sh"]
+    restart: "no"
+
+volumes:
+  pgdata:

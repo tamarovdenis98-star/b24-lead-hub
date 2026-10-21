@@ -1,0 +1,12 @@
+# Override for the shared VPS where n8n already runs in its own compose project.
+# Joins the external `proxy` network so n8n reaches Postgres as `b24hub-postgres:5432`.
+# Nothing in /opt/n8n or the reverse proxy has to change.
+services:
+  postgres:
+    container_name: b24hub-postgres
+    mem_limit: 256m
+    networks: [default, proxy]
+
+networks:
+  proxy:
+    external: true
