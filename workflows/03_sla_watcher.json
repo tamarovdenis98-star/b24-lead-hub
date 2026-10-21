@@ -371,7 +371,7 @@
         "options": {
           "queryReplacement": "={{ [ '{' + $json.ok.map(i => i.inbox_id).join(',') + '}', '{' + $json.failed.map(i => i.inbox_id).join(',') + '}', $execution.id ] }}"
         },
-        "query": "WITH b AS (\n  UPDATE assignments SET sla_status = 'breached'\n   WHERE inbox_id = ANY ($1::bigint[]) RETURNING inbox_id, deal_id, manager_id\n), r AS (  -- failed escalations are released for the next run\n  UPDATE assignments SET escalated_at = NULL WHERE inbox_id = ANY ($2::bigint[]) RETURNING inbox_id\n)\nINSERT INTO lead_events (inbox_id, deal_id, step, detail, execution_id)\nSELECT inbox_id, deal_id, 'sla_escalated', jsonb_build_object('manager_id', manager_id, 'notified', 'manager+rop (im) + telegram digest'), $3 FROM b\nRETURNING inbox_id"
+        "query": "WITH b AS (\n  UPDATE assignments SET sla_status = 'breached'\n   WHERE inbox_id = ANY ($1::bigint[]) AND sla_closed_at IS NULL  -- closed meanwhile by 04 / 04b: keep its status\n  RETURNING inbox_id, deal_id, manager_id\n), r AS (  -- failed escalations are released for the next run\n  UPDATE assignments SET escalated_at = NULL WHERE inbox_id = ANY ($2::bigint[]) RETURNING inbox_id\n)\nINSERT INTO lead_events (inbox_id, deal_id, step, detail, execution_id)\nSELECT inbox_id, deal_id, 'sla_escalated', jsonb_build_object('manager_id', manager_id, 'notified', 'manager+rop (im) + telegram digest'), $3 FROM b\nRETURNING inbox_id"
       },
       "position": [
         2200,
@@ -506,7 +506,7 @@
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
       "waitBetweenTries": 3000,
-      "webhookId": "cf86b12e-75bf-4f19-b3b4-462162efe520"
+      "webhookId": "d4b08ed7-832c-46f2-a891-0391b8650b20"
     },
     {
       "credentials": {
@@ -534,7 +534,7 @@
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
       "waitBetweenTries": 3000,
-      "webhookId": "bdf46b52-cfcd-4280-b9b4-9c46811ae5f3"
+      "webhookId": "fb7a9c9a-6163-4dc1-88b2-734c475acdc9"
     },
     {
       "id": "dd83c960-4c76-5bc2-a821-54defdf6ef87",
