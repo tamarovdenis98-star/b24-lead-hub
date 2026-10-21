@@ -168,7 +168,7 @@
         "options": {
           "queryReplacement": "={{ [JSON.stringify($json)] }}"
         },
-        "query": "SELECT $1::jsonb || jsonb_build_object(\n         'slot_at_ms',   floor(extract(epoch FROM rate_limit_reserve('b24')) * 1000),\n         'base_url',     a.base_url,\n         'auth_mode',    a.mode,\n         'access_token', a.access_token) AS state\n  FROM (SELECT 1) one LEFT JOIN b24_auth a ON a.id = 1"
+        "query": "-- State goes through as text, not jsonb: jsonb reorders object keys, and the order of\n-- batch commands matters ($result[x] must refer to a command that already ran).\nSELECT $1::text AS state_text,\n       floor(extract(epoch FROM rate_limit_reserve('b24')) * 1000)::bigint AS slot_at_ms,\n       a.base_url, a.mode AS auth_mode, a.access_token\n  FROM (SELECT 1) one LEFT JOIN b24_auth a ON a.id = 1"
       },
       "position": [
         420,
@@ -379,7 +379,7 @@
       "id": "2fdb86ca-13d9-5d03-a562-58d70d30ec6a",
       "name": "Unwrap",
       "parameters": {
-        "jsCode": "const s = $json.state;\nif (!s.base_url) throw new Error('b24_auth is not configured: run scripts/seed_config.sh');\nreturn [{ json: s }];\n"
+        "jsCode": "const s = { ...JSON.parse($json.state_text), slot_at_ms: Number($json.slot_at_ms),\n            base_url: $json.base_url, auth_mode: $json.auth_mode, access_token: $json.access_token };\nif (!s.base_url) throw new Error('b24_auth is not configured: run scripts/seed_config.sh');\nreturn [{ json: s }];\n"
       },
       "position": [
         620,
