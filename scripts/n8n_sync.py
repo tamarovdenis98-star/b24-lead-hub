@@ -42,6 +42,9 @@ CREDENTIALS = {
     "B24HUB Telegram": ("telegramApi", lambda e: {
         "accessToken": e["TG_BOT_TOKEN"], "baseUrl": "https://api.telegram.org",
     }),
+    "B24HUB DaData": ("httpHeaderAuth", lambda e: {
+        "name": "Authorization", "value": "Token " + e["DADATA_API_KEY"],
+    }),
 }
 
 ALLOWED_SETTINGS = {
