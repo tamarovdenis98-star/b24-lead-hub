@@ -1,0 +1,348 @@
+{
+  "active": true,
+  "connections": {
+    "App opened": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Parse",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Installed portal?": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Verify AUTH_ID",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Respond 403",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Known portal?": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Installed portal?",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Parse": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Known portal?",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Render": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Respond page",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Summary": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Render",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Verify AUTH_ID": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Viewer ok?",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Viewer ok?": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Summary",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Respond 403",
+            "type": "main"
+          }
+        ]
+      ]
+    }
+  },
+  "name": "[B24HUB] 05 app",
+  "nodes": [
+    {
+      "id": "258a2665-c401-5ecc-ac4b-273e118030a1",
+      "name": "App opened",
+      "parameters": {
+        "httpMethod": "POST",
+        "options": {},
+        "path": "b24hub/app",
+        "responseMode": "responseNode"
+      },
+      "position": [
+        0,
+        300
+      ],
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "webhookId": "e7464f99-cda3-5f28-b7ce-1a9897c26ca6"
+    },
+    {
+      "id": "873d5547-869d-5428-835e-21a173268a9b",
+      "name": "Installed portal?",
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "af4b6b48-146d-5d5b-9dde-665c3e2d9b87",
+              "leftValue": "={{ $json.r.known && !!$json.r.auth_id }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        660,
+        300
+      ],
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2
+    },
+    {
+      "credentials": {
+        "postgres": {
+          "name": "B24HUB Postgres"
+        }
+      },
+      "id": "245d01ac-d541-5c65-a715-faaf9ce4ca41",
+      "name": "Known portal?",
+      "parameters": {
+        "operation": "executeQuery",
+        "options": {
+          "queryReplacement": "={{ [JSON.stringify($json), $json.member_id ?? '', $json.domain] }}"
+        },
+        "query": "SELECT $1::jsonb || jsonb_build_object(\n  'known', EXISTS (SELECT 1 FROM b24_app WHERE status = 'installed' AND member_id = $2 AND domain = $3)) AS r"
+      },
+      "position": [
+        440,
+        300
+      ],
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6
+    },
+    {
+      "id": "3c6c5773-e8e1-503e-9fe8-478a9c047602",
+      "name": "Parse",
+      "parameters": {
+        "jsCode": "// Placement / app page: POST AUTH_ID, member_id, PLACEMENT, PLACEMENT_OPTIONS (JSON string); DOMAIN in the query.\nconst b = $json.body ?? {}, q = $json.query ?? {};\nlet opts = {};\ntry { opts = typeof b.PLACEMENT_OPTIONS === 'string' ? JSON.parse(b.PLACEMENT_OPTIONS) : (b.PLACEMENT_OPTIONS ?? {}); } catch { opts = {}; }\nreturn [{ json: { auth_id: b.AUTH_ID ?? null, member_id: b.member_id ?? null, domain: String(q.DOMAIN ?? b.DOMAIN ?? '').toLowerCase(),\n                  placement: b.PLACEMENT ?? null, deal_id: Number(opts.ID) || null } }];\n"
+      },
+      "position": [
+        220,
+        300
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "id": "8ad35edf-b0d3-5d6e-a477-1a02c99bd92b",
+      "name": "Render",
+      "parameters": {
+        "jsCode": "const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\"/g, '&quot;');\n\nconst s = $json.s;\nconst k = (t, v) => `<span class=\"kpi\">${esc(t)}<b>${esc(v)}</b></span>`;\nconst errs = s.last_errors.map((e) => `<tr><td class=\"muted\">${esc(new Date(e.occurred_at).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' }))}</td><td>${esc(e.workflow_name)}</td><td>${esc(e.node_name)}</td><td>${esc(e.message)}</td></tr>`).join('') || '<tr><td colspan=\"4\" class=\"muted\">нет</td></tr>';\nconst html = `<!doctype html><html><head><meta charset=\"utf-8\"><title>b24-lead-hub</title><style>body{font:14px/1.45 -apple-system,Segoe UI,Roboto,sans-serif;color:#1f2933;margin:16px;background:#fff}h1{font-size:18px;margin:0 0 4px}h2{font-size:15px;margin:20px 0 8px}.muted{color:#6b7785}table{border-collapse:collapse;width:100%}td,th{border-bottom:1px solid #e6e9ee;padding:6px 8px;text-align:left;vertical-align:top}th{font-weight:600;color:#52606d;font-size:12px;text-transform:uppercase;letter-spacing:.03em}.b{display:inline-block;padding:2px 8px;border-radius:10px;font-size:12px;font-weight:600}.ok{background:#e3f6ea;color:#16794c}.bad{background:#fde8e8;color:#b42318}.wait{background:#fff4e0;color:#a15c00}.kpi{display:inline-block;margin:0 24px 8px 0}.kpi b{display:block;font-size:22px}code{font-size:12px}</style></head><body>\n<h1>b24-lead-hub</h1><p class=\"muted\">Приём заявок, дедупликация, назначение и контроль SLA</p>\n<div>${k('Заявок за 24 ч', s.leads_24h)}${k('Обработано', s.by_status.done ?? 0)}${k('Отклонено', s.by_status.rejected ?? 0)}${k('В ошибке', s.by_status.failed ?? 0)}</div>\n<div>${k('SLA в срок', s.sla.met ?? 0)}${k('SLA нарушен', s.sla.breached ?? 0)}${k('Ожидают ответа', s.sla.open ?? 0)}${k('Просрочено сейчас', s.open_overdue)}</div>\n<div>${k('Вызовов Б24 за час', s.b24_calls_1h)}${k('Упёрлись в лимит, 24 ч', s.limit_hits_24h)}${k('Проверок ИНН роботом, 24 ч', s.robot_runs_24h)}${k('Ошибок, 24 ч', s.errors_24h)}</div>\n<h2>Последние ошибки</h2><table><tr><th>Когда</th><th>Workflow</th><th>Нода</th><th>Сообщение</th></tr>${errs}</table></body></html>`;\nreturn [{ json: { html } }];\n"
+      },
+      "position": [
+        1540,
+        120
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "id": "1ca7ccfd-e39f-5f72-9ab9-dbb58ce42a7e",
+      "name": "Respond 403",
+      "parameters": {
+        "options": {
+          "responseCode": 403,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "text/html; charset=utf-8"
+              }
+            ]
+          }
+        },
+        "respondWith": "text",
+        "responseBody": "<!doctype html><meta charset=\"utf-8\"><p>Доступ запрещён: запрос не от установленного приложения.</p>"
+      },
+      "position": [
+        1100,
+        460
+      ],
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4
+    },
+    {
+      "id": "fc1be5fd-f6d3-5e31-b974-546b2bf4331d",
+      "name": "Respond page",
+      "parameters": {
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "text/html; charset=utf-8"
+              }
+            ]
+          }
+        },
+        "respondWith": "text",
+        "responseBody": "={{ $json.html }}"
+      },
+      "position": [
+        1760,
+        120
+      ],
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4
+    },
+    {
+      "credentials": {
+        "postgres": {
+          "name": "B24HUB Postgres"
+        }
+      },
+      "id": "9fb08e21-b02e-5abf-ab99-7a011e205166",
+      "name": "Summary",
+      "parameters": {
+        "operation": "executeQuery",
+        "options": {},
+        "query": "SELECT json_build_object(\n  'leads_24h', (SELECT count(*) FROM inbox WHERE received_at > now() - interval '24 hours'),\n  'by_status', (SELECT coalesce(json_object_agg(status, n), '{}') FROM (SELECT status, count(*) n FROM inbox GROUP BY 1) x),\n  'sla', (SELECT coalesce(json_object_agg(sla_status, n), '{}') FROM (SELECT sla_status, count(*) n FROM assignments GROUP BY 1) x),\n  'open_overdue', (SELECT count(*) FROM assignments WHERE sla_status = 'open' AND sla_due < now()),\n  'errors_24h', (SELECT count(*) FROM errors WHERE occurred_at > now() - interval '24 hours'),\n  'b24_calls_1h', (SELECT count(*) FROM b24_call_log WHERE called_at > now() - interval '1 hour'),\n  'limit_hits_24h', (SELECT count(*) FROM b24_call_log WHERE called_at > now() - interval '24 hours' AND error_code IN ('QUERY_LIMIT_EXCEEDED','OPERATION_TIME_LIMIT')),\n  'robot_runs_24h', (SELECT count(*) FROM robot_runs WHERE at > now() - interval '24 hours'),\n  'last_errors', (SELECT coalesce(json_agg(e), '[]') FROM (SELECT occurred_at, workflow_name, node_name, left(error_message, 160) AS message FROM errors ORDER BY id DESC LIMIT 5) e)\n) AS s"
+      },
+      "position": [
+        1320,
+        120
+      ],
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6
+    },
+    {
+      "id": "3beff889-9ac2-5497-9f90-dae477b39188",
+      "maxTries": 3,
+      "name": "Verify AUTH_ID",
+      "parameters": {
+        "jsonBody": "={{ JSON.stringify({ auth: $json.r.auth_id }) }}",
+        "method": "POST",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          },
+          "timeout": 20000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "url": "={{ 'https://' + $json.r.domain + '/rest/app.info.json' }}"
+      },
+      "position": [
+        880,
+        200
+      ],
+      "retryOnFail": true,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "waitBetweenTries": 1000
+    },
+    {
+      "id": "89b5fc46-2cc1-5900-b8ac-9e0a155bcb7b",
+      "name": "Viewer ok?",
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "2ba03a42-34f5-5fde-b737-d76edf4a55d3",
+              "leftValue": "={{ !!$json.body?.result?.ID }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        1100,
+        200
+      ],
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2
+    }
+  ],
+  "settings": {
+    "errorWorkflow": "@name:[B24HUB] 99 error handler",
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all"
+  }
+}
