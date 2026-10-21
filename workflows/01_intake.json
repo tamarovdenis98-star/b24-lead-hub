@@ -1,0 +1,225 @@
+{
+  "active": true,
+  "connections": {
+    "Insert inbox": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Respond 200",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Log reject": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Respond 422",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Valid?": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Insert inbox",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Log reject",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Validate": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Valid?",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Validate",
+            "type": "main"
+          }
+        ]
+      ]
+    }
+  },
+  "name": "[B24HUB] 01 intake",
+  "nodes": [
+    {
+      "credentials": {
+        "postgres": {
+          "name": "B24HUB Postgres"
+        }
+      },
+      "id": "00dbd299-872a-5944-85fd-3fd24996abcd",
+      "name": "Insert inbox",
+      "parameters": {
+        "operation": "executeQuery",
+        "options": {
+          "queryReplacement": "={{ [$json.idempotency_key, $json.source, JSON.stringify($json.payload)] }}"
+        },
+        "query": "WITH ins AS (\n  INSERT INTO inbox (idempotency_key, source, payload)\n  VALUES ($1, $2, $3::jsonb)\n  ON CONFLICT (idempotency_key) DO NOTHING\n  RETURNING id\n)\nSELECT (SELECT id FROM ins) AS inserted_id,\n       (SELECT id FROM inbox WHERE idempotency_key = $1) AS existing_id"
+      },
+      "position": [
+        660,
+        200
+      ],
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6
+    },
+    {
+      "credentials": {
+        "postgres": {
+          "name": "B24HUB Postgres"
+        }
+      },
+      "id": "ad92c53c-11ba-5fd9-8cfd-06549825cd55",
+      "name": "Log reject",
+      "parameters": {
+        "operation": "executeQuery",
+        "options": {
+          "queryReplacement": "={{ [JSON.stringify($json.errors), JSON.stringify($json.payload)] }}"
+        },
+        "query": "INSERT INTO intake_rejects (reasons, payload) VALUES ($1::jsonb, $2::jsonb) RETURNING id"
+      },
+      "position": [
+        660,
+        420
+      ],
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6
+    },
+    {
+      "id": "817fd839-af61-5453-837f-5c1e7bcd0a4f",
+      "name": "Respond 200",
+      "parameters": {
+        "options": {
+          "responseCode": 200
+        },
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: true, duplicate: $json.inserted_id === null, inbox_id: Number($json.inserted_id ?? $json.existing_id) || null }) }}"
+      },
+      "position": [
+        880,
+        200
+      ],
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4
+    },
+    {
+      "id": "60293582-9d57-586f-a294-89ce24db83d1",
+      "name": "Respond 422",
+      "parameters": {
+        "options": {
+          "responseCode": 422
+        },
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: false, errors: $('Validate').item.json.errors }) }}"
+      },
+      "position": [
+        880,
+        420
+      ],
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4
+    },
+    {
+      "id": "93576fb3-4f25-5164-94a1-818f58e55e88",
+      "name": "Valid?",
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "06b9b478-65d1-5b7f-8a02-9c2e77efb8c7",
+              "leftValue": "={{ $json.valid }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        440,
+        300
+      ],
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2
+    },
+    {
+      "id": "04a18308-fa87-5359-a30b-8a14a987bfe8",
+      "name": "Validate",
+      "parameters": {
+        "jsCode": "// Synchronous path is schema validation only. Normalization, INN checksum, dedup in CRM: 02 process.\nconst body = $json.body;\nconst headers = $json.headers ?? {};\nconst errors = [];\nconst isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);\nconst str = (v, max) => typeof v === 'string' && v.trim().length > 0 && v.length <= max;\nconst opt = (path, v, max) => { if (v !== undefined && v !== null && !str(v, max)) errors.push(`${path}: string 1..${max} expected`); };\n\nif (!isObj(body)) {\n  errors.push('body: JSON object expected');\n} else {\n  if (JSON.stringify(body).length > 32768) errors.push('body: larger than 32 KB');\n  if (!['web', 'telegram', 'email', 'api'].includes(body.source)) errors.push('source: one of web|telegram|email|api');\n  if (!isObj(body.contact)) {\n    errors.push('contact: object required');\n  } else {\n    opt('contact.name', body.contact.name, 200);\n    opt('contact.phone', body.contact.phone, 50);\n    opt('contact.email', body.contact.email, 254);\n    if (!body.contact.phone && !body.contact.email) errors.push('contact: phone or email required');\n  }\n  if (body.company !== undefined) {\n    if (!isObj(body.company)) errors.push('company: object expected');\n    else {\n      opt('company.name', body.company.name, 300);\n      if (body.company.inn !== undefined && !/^\\d{10}(\\d{2})?$/.test(String(body.company.inn))) errors.push('company.inn: 10 or 12 digits');\n    }\n  }\n  opt('message', body.message, 5000);\n  opt('region', body.region, 100);\n  opt('product', body.product, 100);\n  if (body.utm !== undefined && !isObj(body.utm)) errors.push('utm: object expected');\n}\n\n// Idempotency key: explicit header wins; otherwise the source's own id.\nconst headerKey = headers['idempotency-key'];\nlet key = null;\nif (headerKey !== undefined) {\n  if (!str(headerKey, 200)) errors.push('Idempotency-Key header: string 1..200');\n  else key = `hdr:${headerKey.trim()}`;\n} else if (isObj(body)) {\n  if (!str(body.external_id === undefined ? undefined : String(body.external_id), 200)) errors.push('external_id: required when no Idempotency-Key header');\n  else key = `${body.source}:${String(body.external_id).trim()}`;\n}\n\nreturn { json: { valid: errors.length === 0, errors, idempotency_key: key, source: body?.source ?? null, payload: body ?? null } };\n",
+        "mode": "runOnceForEachItem"
+      },
+      "position": [
+        220,
+        300
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "B24HUB Intake Secret"
+        }
+      },
+      "id": "f99ca05a-6203-565b-95b2-f0032355eb97",
+      "name": "Webhook",
+      "parameters": {
+        "authentication": "headerAuth",
+        "httpMethod": "POST",
+        "options": {},
+        "path": "b24hub/intake",
+        "responseMode": "responseNode"
+      },
+      "position": [
+        0,
+        300
+      ],
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "webhookId": "1ecfbba6-ea2c-5497-a54e-e7500f1fe0da"
+    }
+  ],
+  "settings": {
+    "errorWorkflow": "@name:[B24HUB] 99 error handler",
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all"
+  }
+}
