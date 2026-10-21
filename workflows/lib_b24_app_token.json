@@ -1,0 +1,400 @@
+{
+  "active": true,
+  "connections": {
+    "Action": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "OAuth refresh",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Wait for other refresher",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Use current",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Check refresh": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Save tokens",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Claim refresh": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Decide",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Decide": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Action",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Init": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Claim refresh",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Next round": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Claim refresh",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "OAuth refresh": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Check refresh",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Save tokens": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Refreshed",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Wait for other refresher": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Next round",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "When called": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Init",
+            "type": "main"
+          }
+        ]
+      ]
+    }
+  },
+  "name": "[B24HUB] lib b24_app_token",
+  "nodes": [
+    {
+      "id": "f5ef71d7-47a0-506a-8955-f27bcb3fc4f3",
+      "name": "Action",
+      "parameters": {
+        "options": {
+          "fallbackOutput": "extra"
+        },
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "c3c29493-dd35-52d1-a78a-7cd184608d7f",
+                    "leftValue": "={{ $json.action }}",
+                    "operator": {
+                      "operation": "equals",
+                      "type": "string"
+                    },
+                    "rightValue": "refresh"
+                  }
+                ],
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                }
+              },
+              "outputKey": "refresh",
+              "renameOutput": true
+            },
+            {
+              "conditions": {
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "0ebd6493-876d-5b68-9b48-4c75f8f93197",
+                    "leftValue": "={{ $json.action }}",
+                    "operator": {
+                      "operation": "equals",
+                      "type": "string"
+                    },
+                    "rightValue": "wait"
+                  }
+                ],
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                }
+              },
+              "outputKey": "wait",
+              "renameOutput": true
+            }
+          ]
+        }
+      },
+      "position": [
+        800,
+        300
+      ],
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2
+    },
+    {
+      "id": "207e8077-0aa4-5399-9583-199388624cf6",
+      "name": "Check refresh",
+      "parameters": {
+        "jsCode": "const b = $json.body ?? {};\nconst member = $('Decide').first().json.member_id;\nif (!b.access_token || !b.refresh_token) {\n  // invalid_grant = refresh token expired or app removed: only a reinstall helps\n  return [{ json: { ok: false, member_id: member, error: `${b.error ?? 'HTTP ' + $json.statusCode} ${b.error_description ?? ''}`.trim() } }];\n}\nreturn [{ json: { ok: true, member_id: member, access_token: b.access_token, refresh_token: b.refresh_token,\n                  expires_in: Number(b.expires_in ?? 3600), client_endpoint: b.client_endpoint ?? null } }];\n"
+      },
+      "position": [
+        1220,
+        160
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "credentials": {
+        "postgres": {
+          "name": "B24HUB Postgres"
+        }
+      },
+      "id": "612eaf89-bd81-5b07-bfc8-1e95f916b453",
+      "name": "Claim refresh",
+      "parameters": {
+        "operation": "executeQuery",
+        "options": {
+          "queryReplacement": "={{ [$json.force, $json.stale, $json.round] }}"
+        },
+        "query": "WITH app AS (\n  SELECT * FROM b24_app WHERE status = 'installed' ORDER BY updated_at DESC LIMIT 1\n), need AS (\n  SELECT member_id, (expires_at < now() + interval '60 seconds' OR ($1::boolean AND access_token = $2)) AS stale FROM app\n), claim AS (\n  UPDATE b24_app b SET refresh_lock_until = now() + interval '30 seconds'\n    FROM need\n   WHERE b.member_id = need.member_id AND need.stale\n     AND (b.refresh_lock_until IS NULL OR b.refresh_lock_until < now())\n  RETURNING b.member_id\n)\nSELECT app.member_id, app.client_endpoint, app.access_token, app.refresh_token, need.stale,\n       EXISTS (SELECT 1 FROM claim) AS must_refresh, $3::int AS round, $1::boolean AS force, $2 AS stale_token\n  FROM app JOIN need USING (member_id)"
+      },
+      "position": [
+        400,
+        300
+      ],
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6
+    },
+    {
+      "id": "7af40914-a66c-598f-bfe7-38677ce455cc",
+      "name": "Decide",
+      "parameters": {
+        "jsCode": "const r = $json;\nif (!r.member_id) throw new Error('Bitrix24 local app is not installed (b24_app is empty): install the app on the portal');\nconst action = r.must_refresh ? 'refresh' : r.stale ? (r.round >= 5 ? 'give_up' : 'wait') : 'use';\nif (action === 'give_up') throw new Error('app token refresh is locked by another worker for too long');\nreturn [{ json: { ...r, action } }];\n"
+      },
+      "position": [
+        600,
+        300
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "id": "efb85711-cae2-51cb-b67e-dec594d974e8",
+      "name": "Init",
+      "parameters": {
+        "jsCode": "// Input: {force_refresh?, stale_access_token?}. Output: {access_token, client_endpoint}.\n// Refresh when the token expires within 60 s, or when a caller got expired_token with the CURRENT token\n// (if another worker already refreshed, the stored token differs and is simply returned).\nconst i = $input.first().json;\nreturn [{ json: { force: !!i.force_refresh, stale: i.stale_access_token ?? '', round: 1 } }];\n"
+      },
+      "position": [
+        200,
+        300
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "id": "e4fd8a8d-a669-59fd-ac07-e904b2e0ce13",
+      "name": "Next round",
+      "parameters": {
+        "jsCode": "const d = $('Decide').first().json;\nreturn [{ json: { force: d.force, stale: d.stale_token, round: d.round + 1 } }];\n"
+      },
+      "position": [
+        1220,
+        340
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "credentials": {
+        "httpCustomAuth": {
+          "name": "B24HUB App OAuth"
+        }
+      },
+      "id": "0abcbe87-b9f0-5d08-9264-c64252d1798a",
+      "maxTries": 3,
+      "name": "OAuth refresh",
+      "parameters": {
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "method": "GET",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          },
+          "timeout": 20000
+        },
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "grant_type",
+              "value": "refresh_token"
+            },
+            {
+              "name": "refresh_token",
+              "value": "={{ $json.refresh_token }}"
+            }
+          ]
+        },
+        "sendQuery": true,
+        "url": "https://oauth.bitrix24.tech/oauth/token/"
+      },
+      "position": [
+        1020,
+        160
+      ],
+      "retryOnFail": true,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "id": "758249fa-05bb-59f5-ad76-cc27711f798b",
+      "name": "Refreshed",
+      "parameters": {
+        "jsCode": "if (!$json.ok) throw new Error(`Bitrix24 OAuth refresh failed: ${$json.error}. Reinstall the app if the refresh token is gone.`);\nreturn [{ json: { access_token: $json.access_token, client_endpoint: $json.client_endpoint, refreshed: true } }];\n"
+      },
+      "position": [
+        1620,
+        160
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "credentials": {
+        "postgres": {
+          "name": "B24HUB Postgres"
+        }
+      },
+      "id": "13f36f95-1d19-54cb-9fe1-15ed84217efe",
+      "name": "Save tokens",
+      "parameters": {
+        "operation": "executeQuery",
+        "options": {
+          "queryReplacement": "={{ [$json.member_id, $json.ok, $json.access_token ?? '', $json.refresh_token ?? '', $json.expires_in ?? 0, $json.client_endpoint ?? '', $json.error ?? ''] }}"
+        },
+        "query": "UPDATE b24_app\n   SET access_token = CASE WHEN $2 THEN $3 ELSE access_token END,\n       refresh_token = CASE WHEN $2 THEN $4 ELSE refresh_token END,   -- the old refresh token is now invalid\n       expires_at = CASE WHEN $2 THEN now() + make_interval(secs => $5::int) ELSE expires_at END,\n       client_endpoint = coalesce(nullif($6, ''), client_endpoint),\n       last_refresh_at = CASE WHEN $2 THEN now() ELSE last_refresh_at END,\n       refresh_count = refresh_count + CASE WHEN $2 THEN 1 ELSE 0 END,\n       refresh_lock_until = NULL, updated_at = now()\n WHERE member_id = $1\nRETURNING access_token, client_endpoint, $2::boolean AS ok, $7 AS error"
+      },
+      "position": [
+        1420,
+        160
+      ],
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6
+    },
+    {
+      "id": "095074d5-bdb2-575d-ac02-85b4bef8706d",
+      "name": "Use current",
+      "parameters": {
+        "jsCode": "return [{ json: { access_token: $json.access_token, client_endpoint: $json.client_endpoint, refreshed: false } }];\n"
+      },
+      "position": [
+        1020,
+        500
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "id": "c6fda3bd-6460-5583-98d4-81dc5a8b0b82",
+      "name": "Wait for other refresher",
+      "parameters": {
+        "amount": 2
+      },
+      "position": [
+        1020,
+        340
+      ],
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "webhookId": "a2a79a3e-1790-5001-b378-7808873b3411"
+    },
+    {
+      "id": "f11c940c-521b-5c73-9ef6-fe7398ae290d",
+      "name": "When called",
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "position": [
+        0,
+        300
+      ],
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1
+    }
+  ],
+  "settings": {
+    "errorWorkflow": "@name:[B24HUB] 99 error handler",
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "none"
+  }
+}

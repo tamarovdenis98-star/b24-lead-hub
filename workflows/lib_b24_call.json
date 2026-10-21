@@ -12,6 +12,24 @@
         ]
       ]
     },
+    "App auth?": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Get app token",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Acquire slot",
+            "type": "main"
+          }
+        ]
+      ]
+    },
     "Backoff": {
       "main": [
         [
@@ -34,7 +52,29 @@
         ]
       ]
     },
+    "Get app token": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Merge token",
+            "type": "main"
+          }
+        ]
+      ]
+    },
     "Init": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "App auth?",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Merge token": {
       "main": [
         [
           {
@@ -50,7 +90,7 @@
         [
           {
             "index": 0,
-            "node": "Acquire slot",
+            "node": "App auth?",
             "type": "main"
           }
         ]
@@ -178,6 +218,40 @@
       "typeVersion": 2.6
     },
     {
+      "id": "856912fe-3dc4-5b6b-91b6-641553d4657b",
+      "name": "App auth?",
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "84c84ae7-3c46-5409-b56a-07c57585a970",
+              "leftValue": "={{ $json.auth === 'app' }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        300,
+        500
+      ],
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2
+    },
+    {
       "id": "f0e03e9a-659a-53ad-a877-aecd617e582e",
       "name": "Backoff",
       "parameters": {
@@ -221,10 +295,32 @@
       "waitBetweenTries": 1000
     },
     {
+      "id": "518c6b5a-2a9c-5f7e-804f-87a338a4dc16",
+      "name": "Get app token",
+      "parameters": {
+        "mode": "each",
+        "options": {
+          "waitForSubWorkflow": true
+        },
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "@name:[B24HUB] lib b24_app_token"
+        }
+      },
+      "position": [
+        500,
+        600
+      ],
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1
+    },
+    {
       "id": "7f57c2bc-8891-56c2-9d10-d69229c7cca4",
       "name": "Init",
       "parameters": {
-        "jsCode": "// Contract: exactly one item {method, params?, caller_workflow?, caller_execution_id?, max_attempts?}.\n// Callers use Execute Workflow with mode \"each\".\nconst items = $input.all();\nif (items.length !== 1) throw new Error(`lib b24_call expects 1 item, got ${items.length}`);\nconst i = items[0].json;\nif (!i.method || !/^[a-z0-9_.]+$/i.test(i.method)) throw new Error(`invalid Bitrix24 method: ${i.method}`);\nreturn [{ json: {\n  method: i.method,\n  params: i.params ?? {},\n  caller_workflow: i.caller_workflow ?? null,\n  caller_execution_id: i.caller_execution_id ?? null,\n  max_attempts: Math.min(Number(i.max_attempts ?? 5), 8),\n  attempt: 1,\n}}];\n"
+        "jsCode": "// Contract: exactly one item {method, params?, auth?, caller_workflow?, caller_execution_id?, max_attempts?}.\n// Callers use Execute Workflow with mode \"each\".\nconst items = $input.all();\nif (items.length !== 1) throw new Error(`lib b24_call expects 1 item, got ${items.length}`);\nconst i = items[0].json;\nif (!i.method || !/^[a-z0-9_.]+$/i.test(i.method)) throw new Error(`invalid Bitrix24 method: ${i.method}`);\nreturn [{ json: {\n  method: i.method,\n  params: i.params ?? {},\n  caller_workflow: i.caller_workflow ?? null,\n  caller_execution_id: i.caller_execution_id ?? null,\n  max_attempts: Math.min(Number(i.max_attempts ?? 5), 8),\n  auth: i.auth === 'app' ? 'app' : 'webhook',   // 'app' = OAuth of the local app (robots, placements, event.send)\n  force_refresh: false,\n  attempt: 1,\n}}];\n"
       },
       "position": [
         200,
@@ -256,10 +352,23 @@
       "typeVersion": 2.6
     },
     {
+      "id": "305bf36b-7198-547f-9a2e-afd33a38f12a",
+      "name": "Merge token",
+      "parameters": {
+        "jsCode": "const s = $('App auth?').first().json;\nreturn [{ json: { ...s, app_access_token: $json.access_token, app_endpoint: $json.client_endpoint } }];\n"
+      },
+      "position": [
+        700,
+        600
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
       "id": "a5e8094d-b5a4-56d7-9c62-7540a7225eea",
       "name": "Next attempt",
       "parameters": {
-        "jsCode": "const s = $json;\nreturn [{ json: { method: s.method, params: s.params, caller_workflow: s.caller_workflow, caller_execution_id: s.caller_execution_id,\n                  max_attempts: s.max_attempts, attempt: s.attempt + 1 } }];\n"
+        "jsCode": "const s = $json;\nreturn [{ json: { method: s.method, params: s.params, caller_workflow: s.caller_workflow, caller_execution_id: s.caller_execution_id,\n                  max_attempts: s.max_attempts, attempt: s.attempt + 1, auth: s.auth,\n                  force_refresh: !!s.force_refresh, stale_access_token: s.force_refresh ? s.access_token : null } }];\n"
       },
       "position": [
         2260,
@@ -272,7 +381,7 @@
       "id": "28d0794d-ab0e-5696-b94f-94691f757661",
       "name": "Parse response",
       "parameters": {
-        "jsCode": "// Bitrix24 may report errors with HTTP 200, so the body is always inspected.\nconst s = $('Stamp').first().json;\nconst status = Number($json.statusCode ?? 0);\nlet body = $json.body;\nif (typeof body === 'string') { try { body = JSON.parse(body); } catch { body = { error: 'NON_JSON_RESPONSE', error_description: body.slice(0, 300) }; } }\nbody = body ?? {};\nconst RETRYABLE_CODES = ['QUERY_LIMIT_EXCEEDED', 'OPERATION_TIME_LIMIT', 'INTERNAL_SERVER_ERROR'];\nconst errorCode = body.error ? String(body.error) : (status >= 400 ? `HTTP_${status}` : null);\nconst ok = !errorCode;\nconst retryable = !ok && (RETRYABLE_CODES.includes(errorCode) || [429, 500, 502, 503, 504].includes(status));\nconst t = body.time ?? {};\n// Exponential backoff with jitter; OPERATION_TIME_LIMIT waits until the oldest minute bucket resets.\nlet backoff = Math.min(30000, 1000 * 2 ** (s.attempt - 1)) + Math.floor(Math.random() * 250);\nif (errorCode === 'OPERATION_TIME_LIMIT' && t.operating_reset_at) {\n  backoff = Math.max(backoff, Math.min(60000, t.operating_reset_at * 1000 - Date.now()));\n}\nreturn [{ json: {\n  ...s,\n  ok, retryable, http_status: status,\n  error_code: errorCode,\n  error_description: ok ? null : String(body.error_description ?? '').slice(0, 1000),\n  result: ok ? body.result : null,\n  total: body.total ?? null,\n  next: body.next ?? null,\n  result_error: body.result_error ?? null,\n  operating: t.operating ?? null,\n  operating_reset_at: t.operating_reset_at ? new Date(t.operating_reset_at * 1000).toISOString() : null,\n  duration_ms: Date.now() - s.sent_at,\n  backoff_ms: backoff,\n  will_retry: retryable && s.attempt < s.max_attempts,\n}}];\n"
+        "jsCode": "// Bitrix24 may report errors with HTTP 200, so the body is always inspected.\nconst s = $('Stamp').first().json;\nconst status = Number($json.statusCode ?? 0);\nlet body = $json.body;\nif (typeof body === 'string') { try { body = JSON.parse(body); } catch { body = { error: 'NON_JSON_RESPONSE', error_description: body.slice(0, 300) }; } }\nbody = body ?? {};\nconst RETRYABLE_CODES = ['QUERY_LIMIT_EXCEEDED', 'OPERATION_TIME_LIMIT', 'INTERNAL_SERVER_ERROR'];\nconst errorCode = body.error ? String(body.error) : (status >= 400 ? `HTTP_${status}` : null);\nconst ok = !errorCode;\n// An expired app token is refreshed (lib b24_app_token) and the call repeated at once.\nconst expired = !ok && s.auth === 'app' && ['expired_token', 'invalid_token'].includes(errorCode);\nconst retryable = !ok && (expired || RETRYABLE_CODES.includes(errorCode) || [429, 500, 502, 503, 504].includes(status));\nconst t = body.time ?? {};\n// Exponential backoff with jitter; OPERATION_TIME_LIMIT waits until the oldest minute bucket resets.\nlet backoff = expired ? 0 : Math.min(30000, 1000 * 2 ** (s.attempt - 1)) + Math.floor(Math.random() * 250);\nif (errorCode === 'OPERATION_TIME_LIMIT' && t.operating_reset_at) {\n  backoff = Math.max(backoff, Math.min(60000, t.operating_reset_at * 1000 - Date.now()));\n}\nreturn [{ json: {\n  ...s,\n  ok, retryable, http_status: status,\n  error_code: errorCode,\n  error_description: ok ? null : String(body.error_description ?? '').slice(0, 1000),\n  result: ok ? body.result : null,\n  total: body.total ?? null,\n  next: body.next ?? null,\n  result_error: body.result_error ?? null,\n  operating: t.operating ?? null,\n  operating_reset_at: t.operating_reset_at ? new Date(t.operating_reset_at * 1000).toISOString() : null,\n  duration_ms: Date.now() - s.sent_at,\n  backoff_ms: backoff,\n  will_retry: retryable && s.attempt < s.max_attempts,\n  force_refresh: expired,\n}}];\n"
       },
       "position": [
         1620,
@@ -379,7 +488,7 @@
       "id": "2fdb86ca-13d9-5d03-a562-58d70d30ec6a",
       "name": "Unwrap",
       "parameters": {
-        "jsCode": "const s = { ...JSON.parse($json.state_text), slot_at_ms: Number($json.slot_at_ms),\n            base_url: $json.base_url, auth_mode: $json.auth_mode, access_token: $json.access_token };\nif (!s.base_url) throw new Error('b24_auth is not configured: run scripts/seed_config.sh');\nreturn [{ json: s }];\n"
+        "jsCode": "const st = JSON.parse($json.state_text);\nconst s = { ...st, slot_at_ms: Number($json.slot_at_ms) };\nif (st.auth === 'app') Object.assign(s, { base_url: st.app_endpoint, auth_mode: 'oauth', access_token: st.app_access_token });\nelse Object.assign(s, { base_url: $json.base_url, auth_mode: $json.auth_mode, access_token: $json.access_token });\nif (!s.base_url) throw new Error('b24_auth is not configured: run scripts/seed_config.sh');\nreturn [{ json: s }];\n"
       },
       "position": [
         620,
