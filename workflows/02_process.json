@@ -1,0 +1,195 @@
+{
+  "active": true,
+  "connections": {
+    "Claim batch": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Claimed any?",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Claimed any?": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Process lead",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Every 15 s": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Claim batch",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Process lead": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Done",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Mark failed",
+            "type": "main"
+          }
+        ]
+      ]
+    }
+  },
+  "name": "[B24HUB] 02 process",
+  "nodes": [
+    {
+      "credentials": {
+        "postgres": {
+          "name": "B24HUB Postgres"
+        }
+      },
+      "id": "c6b961ad-dea2-59d0-b9d9-47ad49b2b9ce",
+      "name": "Claim batch",
+      "parameters": {
+        "operation": "executeQuery",
+        "options": {},
+        "query": "WITH cfg AS (\n  SELECT coalesce((SELECT value::int FROM settings WHERE key = 'process_batch_size'), 10)  AS batch,\n         coalesce((SELECT value::int FROM settings WHERE key = 'process_max_attempts'), 5) AS max_att\n), picked AS (\n  SELECT i.id\n    FROM inbox i, cfg\n   WHERE ((i.status IN ('new', 'failed') AND i.next_attempt_at <= now())\n          OR (i.status = 'processing' AND i.locked_at < now() - interval '10 minutes'))  -- crashed worker\n     AND i.attempt_count < cfg.max_att\n   ORDER BY i.next_attempt_at, i.id\n   LIMIT (SELECT batch FROM cfg)\n   FOR UPDATE OF i SKIP LOCKED\n)\nUPDATE inbox i\n   SET status = 'processing', locked_at = now(), attempt_count = i.attempt_count + 1, updated_at = now()\n  FROM picked\n WHERE i.id = picked.id\nRETURNING i.id AS inbox_id, i.idempotency_key, i.source, i.payload, i.attempt_count, i.received_at"
+      },
+      "position": [
+        220,
+        300
+      ],
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6
+    },
+    {
+      "id": "f360d251-9d20-5c7d-be61-9e2c18aa6381",
+      "name": "Claimed any?",
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "2cdf0522-d9dc-5328-bcb2-dfdec42aa54f",
+              "leftValue": "={{ $json.inbox_id !== undefined }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        440,
+        300
+      ],
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2
+    },
+    {
+      "id": "6bb99a28-7470-5ecc-8fd7-c509b23d5ed7",
+      "name": "Done",
+      "parameters": {},
+      "position": [
+        880,
+        200
+      ],
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1
+    },
+    {
+      "id": "7b8528e1-e722-50bb-9f49-e3881fe4dd89",
+      "name": "Every 15 s",
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "seconds",
+              "secondsInterval": 15
+            }
+          ]
+        }
+      },
+      "position": [
+        0,
+        300
+      ],
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2
+    },
+    {
+      "credentials": {
+        "postgres": {
+          "name": "B24HUB Postgres"
+        }
+      },
+      "id": "7827b49b-c31b-5b23-8baa-633b74aebbfa",
+      "name": "Mark failed",
+      "parameters": {
+        "operation": "executeQuery",
+        "options": {
+          "queryReplacement": "={{ [$('Claim batch').item.json.inbox_id, String($json.error?.message ?? $json.error ?? 'unknown error')] }}"
+        },
+        "query": "WITH rel AS (\n  DELETE FROM client_locks WHERE inbox_id = $1\n), u AS (\n  UPDATE inbox\n     SET status = 'failed', last_error = left($2, 2000), locked_at = NULL, updated_at = now(),\n         next_attempt_at = now() + make_interval(mins => power(2, attempt_count - 1)::int)\n   WHERE id = $1\n  RETURNING id, attempt_count, next_attempt_at\n)\nINSERT INTO lead_events (inbox_id, step, detail)\nSELECT id, 'failed', jsonb_build_object('attempt', attempt_count, 'error', left($2, 500), 'next_attempt_at', next_attempt_at) FROM u\nRETURNING inbox_id"
+      },
+      "position": [
+        880,
+        420
+      ],
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6
+    },
+    {
+      "id": "0975362c-66c4-52bc-9457-4e2708af74f9",
+      "name": "Process lead",
+      "onError": "continueErrorOutput",
+      "parameters": {
+        "mode": "each",
+        "options": {
+          "waitForSubWorkflow": true
+        },
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "@name:[B24HUB] 02a process lead"
+        }
+      },
+      "position": [
+        660,
+        300
+      ],
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1
+    }
+  ],
+  "settings": {
+    "errorWorkflow": "@name:[B24HUB] 99 error handler",
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "none"
+  }
+}

@@ -1,0 +1,792 @@
+{
+  "active": true,
+  "connections": {
+    "Build create": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "b24: create",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "DaData cache": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Need DaData?",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "DaData findById": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Parse DaData",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Deal exists?": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Prepare repair",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Build create",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Decide": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Route",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Finalize": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Mark done",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Load settings": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Normalize",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Lock client": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Locked?",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Locked?": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "DaData cache",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Defer",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Need DaData?": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "DaData findById",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Prepare lookup",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Normalize": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Rejected?",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Parse DaData": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Store DaData",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Prepare lookup": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "b24: lookup",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Prepare repair": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "b24: repair lookup",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Rejected?": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Mark rejected",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Lock client",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Route": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Deal exists?",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Start": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Load settings",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Store DaData": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Prepare lookup",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "b24: create": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Finalize",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "b24: lookup": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Decide",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "b24: repair lookup": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Build create",
+            "type": "main"
+          }
+        ]
+      ]
+    }
+  },
+  "name": "[B24HUB] 02a process lead",
+  "nodes": [
+    {
+      "id": "addfa888-5107-50e3-bd9a-f0a4e2d018bb",
+      "name": "Build create",
+      "parameters": {
+        "jsCode": "function qs(obj, prefix) {\n  return Object.entries(obj).filter(([, v]) => v !== undefined && v !== null).map(([k, v]) => {\n    const key = prefix ? `${prefix}[${k}]` : k;\n    if (v && typeof v === 'object' && !('raw' in v)) return qs(v, key);\n    const val = (v && typeof v === 'object') ? v.raw : encodeURIComponent(String(v));\n    return `${key}=${val}`;\n  }).filter(Boolean).join('&');\n}\n\nconst s = $('Route').first().json.state;\nconst cfg = s.cfg, n = s.norm, rt = s.route;\nconst prefix = cfg.crm_title_prefix ?? '';\nconst mgr = rt.manager_id;\n\nlet repair = null;\nif (s.crm.deal) {\n  const rr = $('b24: repair lookup').first().json;\n  if (!rr.ok) throw new Error(`Bitrix24 repair lookup failed: ${rr.error_code}`);\n  const x = rr.result?.result ?? {};\n  repair = {\n    task_id: Number(x.tasks?.tasks?.[0]?.id) || null,\n    sla_item_id: Number(x.sla?.items?.[0]?.id) || null,\n    comment_exists: (Array.isArray(x.comments) ? x.comments : []).some((c) => String(c.COMMENT ?? '').includes('[b24hub]')),\n  };\n}\n\nconst minutes = Number(n.score.urgency === 'high' ? cfg.sla_minutes_high : cfg.sla_minutes_normal);\nconst dueMs = Date.now() + minutes * 60000;\nconst msk = (ms) => new Date(ms + 3 * 3600e3).toISOString().slice(0, 19) + '+03:00';\nconst hhmm = new Date(dueMs + 3 * 3600e3).toISOString().slice(11, 16);\nconst ddmm = new Date(dueMs + 3 * 3600e3).toISOString().slice(5, 10).split('-').reverse().join('.');\nconst who = s.dadata?.name ?? n.company.name ?? n.contact.name ?? n.contact.phone ?? n.contact.email;\nconst SOURCE = { web: 'WEB', telegram: 'TELEGRAM', email: 'EMAIL', api: 'OTHER' };\n\nconst deal = s.crm.deal ? Number(s.crm.deal.ID) : null;\nconst dealRef = deal ?? { raw: '$result[deal]' };\nconst cmd = {};\nlet companyRef = s.crm.company_id;\nif (!deal) {\n  if (n.company.inn_valid && !s.crm.company_id) {\n    cmd.company = 'crm.company.add?' + qs({ fields: {\n      TITLE: prefix + (s.dadata?.name ?? n.company.name ?? `ИНН ${n.company.inn}`), ASSIGNED_BY_ID: mgr,\n      ORIGINATOR_ID: 'b24hub', ORIGIN_ID: n.company.inn, OPENED: 'Y' } });\n    const ip = n.company.inn.length === 12;\n    cmd.requisite = 'crm.requisite.add?' + qs({ fields: {\n      ENTITY_TYPE_ID: 4, ENTITY_ID: { raw: '$result[company]' },\n      PRESET_ID: ip ? cfg.requisite_preset_ip : cfg.requisite_preset_org,\n      NAME: s.dadata?.name ?? n.company.name ?? n.company.inn, RQ_INN: n.company.inn,\n      RQ_KPP: ip ? undefined : s.dadata?.kpp ?? undefined,\n      [ip ? 'RQ_OGRNIP' : 'RQ_OGRN']: s.dadata?.ogrn ?? undefined } });\n    companyRef = { raw: '$result[company]' };\n  }\n  if (!s.crm.contact_id) {\n    const f = { NAME: prefix + (n.contact.first ?? n.contact.phone ?? n.contact.email), LAST_NAME: n.contact.last ?? undefined,\n                ASSIGNED_BY_ID: mgr, SOURCE_ID: SOURCE[n.source] ?? 'OTHER', ORIGINATOR_ID: 'b24hub',\n                ORIGIN_ID: n.contact.phone ?? n.contact.email, COMPANY_ID: companyRef ?? undefined, OPENED: 'Y' };\n    if (n.contact.phone) f.PHONE = [{ VALUE: n.contact.phone, VALUE_TYPE: 'WORK' }];\n    if (n.contact.email) f.EMAIL = [{ VALUE: n.contact.email, VALUE_TYPE: 'WORK' }];\n    cmd.contact = 'crm.contact.add?' + qs({ fields: f });\n  }\n  const utm = n.utm ?? {};\n  cmd.deal = 'crm.deal.add?' + qs({ fields: {\n    TITLE: `${prefix}${n.score.topic !== 'other' ? n.score.topic : (n.product ?? 'заявка')} — ${who}`,\n    CONTACT_ID: s.crm.contact_id ?? { raw: '$result[contact]' }, COMPANY_ID: companyRef ?? undefined,\n    ASSIGNED_BY_ID: mgr, SOURCE_ID: SOURCE[n.source] ?? 'OTHER', SOURCE_DESCRIPTION: `b24hub inbox #${s.inbox_id}`,\n    COMMENTS: n.message ?? undefined, OPPORTUNITY: n.score.budget ?? undefined, CURRENCY_ID: n.score.budget ? 'RUB' : undefined,\n    ORIGINATOR_ID: 'b24hub', ORIGIN_ID: s.idempotency_key, OPENED: 'Y',\n    UTM_SOURCE: utm.source, UTM_MEDIUM: utm.medium, UTM_CAMPAIGN: utm.campaign } });\n}\nif (!repair?.task_id) {\n  cmd.task = 'tasks.task.add?' + qs({ fields: {\n    TITLE: `${prefix}Ответить клиенту: ${who}`, RESPONSIBLE_ID: mgr, DEADLINE: msk(dueMs),\n    UF_CRM_TASK: [deal ? `D_${deal}` : { raw: 'D_$result[deal]' }],\n    DESCRIPTION: `Первый ответ до ${hhmm} (${minutes} мин, срочность: ${n.score.urgency}).\\n${n.message ?? ''}` } });\n}\nif (!repair?.sla_item_id) {\n  cmd.sla = 'crm.item.add?' + qs({ entityTypeId: cfg.sla_entity_type_id, fields: {\n    title: `${prefix}SLA до ${hhmm} ${ddmm} — ${who}`, assignedById: mgr, parentId2: dealRef,\n    stageId: cfg.sla_stage_waiting, begindate: msk(Date.now()), closedate: msk(dueMs),\n    observers: cfg.rop_user_id ? [cfg.rop_user_id] : undefined,\n    ...(cfg.sla_due_field ? { [cfg.sla_due_field]: msk(dueMs) } : {}) } });\n}\nconst ev = Object.fromEntries(s.events.map((e) => [e.step, e.detail]));\nconst lines = [\n  `[B]b24hub[/B] обработал заявку #${s.inbox_id} (${n.source}) [b24hub]`,\n  `Назначен: ${mgr} — ${rt.reason}`,\n  ev.dedup?.contact_id ? `Контакт найден (${ev.dedup.matched_by}): #${ev.dedup.contact_id}` : 'Контакт: новый',\n  ev.enrich?.name ? `DaData: ${ev.enrich.name}${ev.enrich.status ? `, статус ${ev.enrich.status}` : ''}` : (n.company.inn_raw ? `ИНН ${n.company.inn_raw}: ${n.company.inn_valid ? 'не найден в DaData' : 'контрольная сумма не сошлась'}` : 'ИНН: не указан'),\n  `Оценка (${n.score.method}): тема ${n.score.topic}, срочность ${n.score.urgency}${n.score.budget ? `, бюджет ${n.score.budget} ₽` : ''}`,\n  `SLA первого ответа: ${minutes} мин, до ${hhmm} ${ddmm}`,\n  ...(n.warnings.length ? [`Нормализация: ${n.warnings.join('; ')}`] : []),\n];\nif (!repair?.comment_exists) {\n  cmd.comment = 'crm.timeline.comment.add?' + qs({ fields: { ENTITY_ID: dealRef, ENTITY_TYPE: 'deal', COMMENT: lines.join('\\n') } });\n}\nif (!Object.keys(cmd).length) cmd.check = `crm.deal.get?id=${deal}`;\nreturn [{ json: { method: 'batch', params: { halt: 1, cmd }, caller_workflow: $workflow.name, caller_execution_id: $execution.id,\n                  state: { ...s, repair, sla_due: new Date(dueMs).toISOString(), sla_minutes: minutes, planned: Object.keys(cmd) } } }];\n"
+      },
+      "position": [
+        3220,
+        400
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "credentials": {
+        "postgres": {
+          "name": "B24HUB Postgres"
+        }
+      },
+      "id": "88a73f15-b113-572f-b7c3-d15950b620f0",
+      "name": "DaData cache",
+      "parameters": {
+        "operation": "executeQuery",
+        "options": {
+          "queryReplacement": "={{ [JSON.stringify($json.state), $json.state.norm.company.inn] }}"
+        },
+        "query": "SELECT $1::jsonb || jsonb_build_object(\n  'dadata', (SELECT data FROM dadata_cache WHERE inn = $2 AND fetched_at > now() - interval '30 days'),\n  'dadata_cached', EXISTS (SELECT 1 FROM dadata_cache WHERE inn = $2 AND fetched_at > now() - interval '30 days')) AS state"
+      },
+      "position": [
+        1220,
+        400
+      ],
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6
+    },
+    {
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "B24HUB DaData"
+        }
+      },
+      "id": "f1ee8cec-b3c3-5aab-99ea-9ae154d56290",
+      "maxTries": 3,
+      "name": "DaData findById",
+      "parameters": {
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "jsonBody": "={{ JSON.stringify({ query: $json.state.norm.company.inn, count: 1 }) }}",
+        "method": "POST",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          },
+          "timeout": 15000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "url": "https://suggestions.dadata.ru/suggestions/api/4_1/rs/findById/party"
+      },
+      "position": [
+        1220,
+        300
+      ],
+      "retryOnFail": true,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "id": "aa2812f8-9f77-5620-92f6-bd60620d3552",
+      "name": "Deal exists?",
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "5ae0d788-176e-5390-b9e7-16e213ed15f5",
+              "leftValue": "={{ !!$json.state.crm.deal }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        2620,
+        400
+      ],
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2
+    },
+    {
+      "id": "c2d682fd-de3a-5a6c-bb11-1d11f505612e",
+      "name": "Decide",
+      "parameters": {
+        "jsCode": "const s = $('Prepare lookup').first().json.state;\nconst r = $json;\nif (!r.ok) throw new Error(`Bitrix24 lookup failed: ${r.error_code} ${r.error_description ?? ''}`);\nconst res = r.result?.result ?? {};\nconst ids = (x) => (Array.isArray(x?.CONTACT) ? x.CONTACT : []).map(Number);\nconst byPhone = ids(res.phone), byEmail = ids(res.email);\nconst all = [...new Set([...byPhone, ...byEmail])].sort((a, b) => a - b);\nconst contactId = all[0] ?? null;  // oldest record wins\nconst owner = Number((byPhone.length ? res.owner_p : byEmail.length ? res.owner_e : null)?.ASSIGNED_BY_ID\n                     ?? res.owner_c?.ASSIGNED_BY_ID ?? 0) || null;\nconst deal = Array.isArray(res.deal) && res.deal.length ? res.deal[0] : null;\n// A deal left by a previous attempt keeps its assignee: routing must not move it.\nconst dealOwner = deal ? Number(deal.ASSIGNED_BY_ID) || null : null;\nconst companyId = Number(Array.isArray(res.company) && res.company[0]?.ENTITY_ID) || null;\nconst detail = {\n  contact_id: contactId, matched_by: byPhone.length ? 'phone' : byEmail.length ? 'email' : null,\n  company_id: companyId, owner_id: owner, existing_deal_id: deal ? Number(deal.ID) : null,\n};\nif (all.length > 1) detail.crm_duplicates = all;  // pre-existing duplicates in CRM: reported, not merged\n// Region for routing: DaData (by INN) is more reliable than what the client typed.\nconst routeRegion = s.dadata?.region ? String(s.dadata.region).toLowerCase().replace(/ё/g, 'е') : s.norm.region_canonical;\nreturn [{ json: { ...s, crm: { contact_id: contactId, company_id: companyId, owner_id: dealOwner ?? owner, deal: deal },\n                  route_region: routeRegion,\n                  events: [...s.events, { step: 'dedup', detail }] } }];\n"
+      },
+      "position": [
+        2220,
+        400
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "credentials": {
+        "postgres": {
+          "name": "B24HUB Postgres"
+        }
+      },
+      "id": "37674ea0-5d5b-51ea-90ac-830eea7b27a4",
+      "name": "Defer",
+      "parameters": {
+        "operation": "executeQuery",
+        "options": {
+          "queryReplacement": "={{ [$json.state.inbox_id, $json.state.execution_id] }}"
+        },
+        "query": "WITH rel AS (\n  DELETE FROM client_locks WHERE inbox_id = $1\n), u AS (\n  UPDATE inbox SET status = 'new', attempt_count = greatest(attempt_count - 1, 0), locked_at = NULL,\n                   next_attempt_at = now() + interval '20 seconds', updated_at = now()\n   WHERE id = $1 RETURNING id\n)\nINSERT INTO lead_events (inbox_id, step, detail, execution_id)\nVALUES ($1, 'deferred', jsonb_build_object('reason', 'same client is being processed by another worker'), $2)\nRETURNING id"
+      },
+      "position": [
+        1220,
+        560
+      ],
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6
+    },
+    {
+      "id": "8d12ccfb-e638-5e76-a61b-2138dfe8d857",
+      "name": "Finalize",
+      "parameters": {
+        "jsCode": "const s = $('Build create').first().json.state;\nconst r = $json;\nif (!r.ok) throw new Error(`Bitrix24 create batch failed: ${r.error_code} ${r.error_description ?? ''}`);\nconst res = r.result?.result ?? {};\nconst errs = Object.entries(r.result?.result_error ?? {}).filter(([, v]) => v && !(Array.isArray(v) && !v.length));\nif (errs.length) throw new Error(`Bitrix24 create failed at \"${errs[0][0]}\": ${JSON.stringify(errs[0][1]).slice(0, 400)}`);\nconst out = {\n  deal_id: s.crm.deal ? Number(s.crm.deal.ID) : Number(res.deal),\n  contact_id: s.crm.contact_id ?? (Number(res.contact) || null),\n  company_id: s.crm.company_id ?? (Number(res.company) || null),\n  task_id: s.repair?.task_id ?? (Number(res.task?.task?.id) || null),\n  sla_item_id: s.repair?.sla_item_id ?? (Number(res.sla?.item?.id) || null),\n  manager_id: s.route.manager_id,\n  created: s.planned,\n  repaired: !!s.crm.deal,\n};\nif (!out.deal_id || !out.sla_item_id || !out.task_id) throw new Error(`Bitrix24 create returned incomplete ids: ${JSON.stringify(out)}`);\nconst events = [...s.events, { step: 'route', detail: s.route }, { step: 'crm', detail: out }];\nreturn [{ json: { inbox_id: s.inbox_id, execution_id: s.execution_id, sla_due: s.sla_due, result: { ...out, score: s.norm.score }, events } }];\n"
+      },
+      "position": [
+        3620,
+        400
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "credentials": {
+        "postgres": {
+          "name": "B24HUB Postgres"
+        }
+      },
+      "id": "f111d1a1-9d64-5c2d-91c3-7378818ea01b",
+      "name": "Load settings",
+      "parameters": {
+        "operation": "executeQuery",
+        "options": {
+          "queryReplacement": "={{ [JSON.stringify($json), $execution.id] }}"
+        },
+        "query": "SELECT $1::jsonb || jsonb_build_object(\n  'cfg', (SELECT jsonb_object_agg(key, value) FROM settings WHERE key <> 'alert_chat_id'),\n  'execution_id', $2::text) AS state"
+      },
+      "position": [
+        200,
+        300
+      ],
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6
+    },
+    {
+      "credentials": {
+        "postgres": {
+          "name": "B24HUB Postgres"
+        }
+      },
+      "id": "2530dfc9-0471-5998-a04f-1221be352011",
+      "name": "Lock client",
+      "parameters": {
+        "operation": "executeQuery",
+        "options": {
+          "queryReplacement": "={{ [JSON.stringify($json), JSON.stringify([$json.norm.contact.phone && 'phone:' + $json.norm.contact.phone, $json.norm.contact.email && 'email:' + $json.norm.contact.email, $json.norm.company.inn && 'inn:' + $json.norm.company.inn].filter(Boolean)), $json.inbox_id] }}"
+        },
+        "query": "WITH want AS (SELECT jsonb_array_elements_text($2::jsonb) AS k),\ngot AS (\n  INSERT INTO client_locks (comm_key, inbox_id) SELECT k, $3 FROM want\n  ON CONFLICT (comm_key) DO UPDATE SET inbox_id = EXCLUDED.inbox_id, locked_at = now()\n   WHERE client_locks.inbox_id = EXCLUDED.inbox_id OR client_locks.locked_at < now() - interval '5 minutes'\n  RETURNING comm_key\n)\nSELECT $1::jsonb || jsonb_build_object('locked', (SELECT count(*) FROM got) = (SELECT count(*) FROM want)) AS state"
+      },
+      "position": [
+        820,
+        400
+      ],
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6
+    },
+    {
+      "id": "0eb9f124-7adc-5fff-bf80-788af2d5682c",
+      "name": "Locked?",
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "8efb38c9-9323-5cd2-8b35-c17ed8a194ee",
+              "leftValue": "={{ $json.state.locked }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        1020,
+        400
+      ],
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2
+    },
+    {
+      "credentials": {
+        "postgres": {
+          "name": "B24HUB Postgres"
+        }
+      },
+      "id": "c050a0c4-299f-5100-bef2-3ecd533e4d87",
+      "name": "Mark done",
+      "parameters": {
+        "operation": "executeQuery",
+        "options": {
+          "queryReplacement": "={{ [$json.inbox_id, JSON.stringify($json.result), $json.execution_id, $json.result.deal_id, $json.result.sla_item_id, $json.sla_due, JSON.stringify($json.events)] }}"
+        },
+        "query": "WITH u AS (\n  UPDATE inbox SET status = 'done', result = $2::jsonb, processed_at = now(), locked_at = NULL,\n                   last_error = NULL, execution_id = $3, updated_at = now()\n   WHERE id = $1 RETURNING id\n), rel AS (\n  DELETE FROM client_locks WHERE inbox_id = $1\n), a AS (\n  UPDATE assignments SET deal_id = $4, sla_item_id = $5,\n         crm_created_at = coalesce(crm_created_at, now()), sla_due = coalesce(sla_due, $6::timestamptz)\n   WHERE inbox_id = $1 RETURNING inbox_id\n), e AS (\n  INSERT INTO lead_events (inbox_id, deal_id, step, detail, execution_id)\n  SELECT $1, $4, x.step, x.detail, $3 FROM jsonb_to_recordset($7::jsonb) AS x(step text, detail jsonb)\n  RETURNING id\n)\nSELECT (SELECT count(*) FROM u) AS inbox_updated, (SELECT count(*) FROM a) AS assignment_updated, (SELECT count(*) FROM e) AS events"
+      },
+      "position": [
+        3820,
+        400
+      ],
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6
+    },
+    {
+      "credentials": {
+        "postgres": {
+          "name": "B24HUB Postgres"
+        }
+      },
+      "id": "816d66ba-76c5-5491-9db6-9b3c8f92eee3",
+      "name": "Mark rejected",
+      "parameters": {
+        "operation": "executeQuery",
+        "options": {
+          "queryReplacement": "={{ [$json.inbox_id, $json.norm.reject_reason, $json.execution_id, JSON.stringify($json.events)] }}"
+        },
+        "query": "WITH u AS (\n  UPDATE inbox SET status = 'rejected', last_error = $2, processed_at = now(), locked_at = NULL,\n                   execution_id = $3, updated_at = now()\n   WHERE id = $1 RETURNING id\n)\nINSERT INTO lead_events (inbox_id, step, detail, execution_id)\nSELECT $1, x.step, x.detail, $3 FROM jsonb_to_recordset($4::jsonb) AS x(step text, detail jsonb)\nRETURNING id"
+      },
+      "position": [
+        820,
+        120
+      ],
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6
+    },
+    {
+      "id": "7da64fcd-db0b-5505-b8c8-c5250940a9f5",
+      "name": "Need DaData?",
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "03341b53-2827-5009-8505-4b554efc4ebb",
+              "leftValue": "={{ $json.state.norm.company.inn_valid && !$json.state.dadata_cached }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        1020,
+        400
+      ],
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2
+    },
+    {
+      "id": "c4ccd203-4e55-5c7d-ac45-43f52bd98601",
+      "name": "Normalize",
+      "parameters": {
+        "jsCode": "// ---- pure functions: unit-tested by tests/test_normalize.py (runs this exact code under node) ----\nconst PHONE_EXT = /(доб\\.?|ext\\.?|extension|#).*$/i;\n\nfunction normalizePhone(raw) {\n  if (raw === undefined || raw === null || String(raw).trim() === '') return { value: null, error: null };\n  const s = String(raw).trim().replace(PHONE_EXT, '').trim();\n  const digits = s.replace(/\\D/g, '');\n  const plus = s.startsWith('+');\n  let e164 = null;\n  if (digits.length === 11 && (digits[0] === '7' || (digits[0] === '8' && !plus))) e164 = '+7' + digits.slice(1);\n  else if (digits.length === 10 && !plus && /^[3489]/.test(digits)) e164 = '+7' + digits;\n  else if (plus && digits[0] !== '7' && digits.length >= 8 && digits.length <= 15) e164 = '+' + digits;\n  if (e164 && e164.startsWith('+7') && !/^\\+7[3489]\\d{9}$/.test(e164)) e164 = null;\n  return e164 ? { value: e164, error: null } : { value: null, error: `phone \"${String(raw).trim()}\" is not a valid number` };\n}\n\nfunction normalizeEmail(raw) {\n  if (raw === undefined || raw === null || String(raw).trim() === '') return { value: null, error: null };\n  const s = String(raw).trim().replace(/^mailto:/i, '').toLowerCase();\n  return /^[^\\s@]+@[^\\s@]+\\.[^\\s@.]{2,}$/.test(s) && s.length <= 254\n    ? { value: s, error: null } : { value: null, error: `email \"${String(raw).trim()}\" is not valid` };\n}\n\nfunction innValid(inn) {\n  const s = String(inn ?? '').trim();\n  if (!/^(\\d{10}|\\d{12})$/.test(s)) return false;\n  const d = s.split('').map(Number);\n  const chk = (w) => (w.reduce((acc, k, i) => acc + k * d[i], 0) % 11) % 10;\n  if (s.length === 10) return chk([2, 4, 10, 3, 5, 9, 4, 6, 8]) === d[9];\n  return chk([7, 2, 4, 10, 3, 5, 9, 4, 6, 8]) === d[10] && chk([3, 7, 2, 4, 10, 3, 5, 9, 4, 6, 8]) === d[11];\n}\n\nconst REGION_STOP = new Set(['г', 'город', 'обл', 'область', 'край', 'респ', 'республика', 'ао', 'автономный', 'округ']);\nconst REGION_ALIAS = { 'спб': 'санкт-петербург', 'питер': 'санкт-петербург', 'санкт петербург': 'санкт-петербург', 'мск': 'москва' };\nfunction canonicalRegion(raw) {\n  if (!raw) return null;\n  const words = String(raw).toLowerCase().replace(/ё/g, 'е').split(/[\\s,.]+/).filter((w) => w && !REGION_STOP.has(w));\n  const s = words.join(' ').trim();\n  return s ? (REGION_ALIAS[s] ?? s) : null;\n}\n\nfunction splitName(raw) {\n  const parts = String(raw ?? '').trim().split(/\\s+/).filter(Boolean);\n  if (!parts.length) return { first: null, last: null };\n  return { first: parts[0], last: parts.slice(1).join(' ') || null };\n}\n\n// Deterministic fallback scorer; an LLM scorer can replace it (stage 6 provides the keys).\nfunction scoreLead(message, product) {\n  const m = String(message ?? '');\n  const urgency = /срочн|сегодня|немедленн|горит|asap|urgent|как можно скорее/i.test(m) ? 'high' : 'normal';\n  let budget = null;\n  const b = m.match(/(\\d[\\d\\s]*(?:[.,]\\d+)?)\\s*(млн|миллион|тыс|т\\.р|k|к|руб|₽)/i);\n  if (b) {\n    const n = parseFloat(b[1].replace(/\\s/g, '').replace(',', '.'));\n    const mult = /млн|миллион/i.test(b[2]) ? 1e6 : /тыс|т\\.р|^k$|^к$/i.test(b[2]) ? 1e3 : 1;\n    budget = Math.round(n * mult);\n  }\n  const topics = [['integration', /интеграц|api|1с|1c|синхрон/i], ['telephony', /телефон|звонк|ip-?атс/i], ['crm', /crm|црм|воронк|сделк/i]];\n  const topic = (product ? String(product).toLowerCase() : null) ?? topics.find(([, rx]) => rx.test(m))?.[0] ?? 'other';\n  return { method: 'rules', topic, urgency, budget };\n}\n\nfunction normalizeLead(p) {\n  const warnings = [];\n  const c = p.contact ?? {};\n  const phone = normalizePhone(c.phone);\n  const email = normalizeEmail(c.email);\n  if (phone.error) warnings.push(phone.error);\n  if (email.error) warnings.push(email.error);\n  const inn = p.company?.inn !== undefined ? String(p.company.inn).trim() : null;\n  const inn_valid = inn ? innValid(inn) : false;\n  if (inn && !inn_valid) warnings.push(`INN ${inn}: checksum mismatch, company enrichment skipped`);\n  const name = c.name ? String(c.name).trim() : null;\n  return {\n    source: p.source,\n    contact: { name, ...splitName(name), phone: phone.value, email: email.value },\n    company: { name: p.company?.name ?? null, inn: inn_valid ? inn : null, inn_raw: inn, inn_valid },\n    region: p.region ?? null,\n    region_canonical: canonicalRegion(p.region),\n    product: p.product ? String(p.product).toLowerCase() : null,\n    message: p.message ?? null,\n    utm: p.utm ?? null,\n    score: scoreLead(p.message, p.product),\n    warnings,\n    reject_reason: phone.value || email.value ? null : 'no valid phone or email after normalization',\n  };\n}\n\n// ---- n8n entry ----\nconst s = $json.state;\nconst n = normalizeLead(s.payload);\nconst events = [{ step: 'normalize', detail: { phone: n.contact.phone, email: n.contact.email, inn_valid: n.company.inn_valid, warnings: n.warnings } },\n                { step: 'score', detail: n.score }];\nif (n.reject_reason) events.push({ step: 'rejected', detail: { reason: n.reject_reason } });\nreturn [{ json: { ...s, norm: n, events } }];\n"
+      },
+      "position": [
+        400,
+        300
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "id": "98b3f059-98d5-5b2f-918a-437141872206",
+      "name": "Parse DaData",
+      "parameters": {
+        "jsCode": "// Enrichment is best-effort: an HTTP error from DaData is recorded and the lead continues.\nconst s = $('DaData cache').first().json.state;\nconst status = Number($json.statusCode ?? 0);\nconst sug = status === 200 ? ($json.body?.suggestions ?? [])[0] : null;\nconst d = sug?.data;\nconst data = d ? {\n  name: sug.value, full_name: d.name?.full_with_opf ?? null, type: d.type ?? null,\n  kpp: d.kpp ?? null, ogrn: d.ogrn ?? null, status: d.state?.status ?? null,\n  region: d.address?.data?.region ?? null, region_with_type: d.address?.data?.region_with_type ?? null,\n  address: d.address?.value ?? null, okved: d.okved ?? null,\n} : null;\nconst events = [...s.events, { step: 'enrich', detail: status === 200\n  ? (data ? { source: 'dadata', name: data.name, status: data.status, region: data.region_with_type } : { source: 'dadata', found: false })\n  : { source: 'dadata', error: `HTTP ${status}` } }];\nreturn [{ json: { state: { ...s, dadata: data, events }, store: status === 200, found: !!data } }];\n"
+      },
+      "position": [
+        1420,
+        300
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "id": "5fe83389-2330-552d-a5c6-15697b054f62",
+      "name": "Prepare lookup",
+      "parameters": {
+        "jsCode": "function qs(obj, prefix) {\n  return Object.entries(obj).filter(([, v]) => v !== undefined && v !== null).map(([k, v]) => {\n    const key = prefix ? `${prefix}[${k}]` : k;\n    if (v && typeof v === 'object' && !('raw' in v)) return qs(v, key);\n    const val = (v && typeof v === 'object') ? v.raw : encodeURIComponent(String(v));\n    return `${key}=${val}`;\n  }).filter(Boolean).join('&');\n}\n\n// One batch call: duplicates by phone and by email (crm.duplicate.findbycomm), the owners of the\n// matched contacts, the company by INN (requisites), and our own deal by ORIGIN_ID (idempotency\n// on the CRM side: a retried lead must find the deal it already created).\nlet s = $json.state;\nif (s.dadata_cached) s = { ...s, events: [...s.events, { step: 'enrich', detail: { source: 'cache', name: s.dadata?.name ?? null } }] };\nconst n = s.norm;\nconst cmd = {\n  deal: 'crm.deal.list?' + qs({ filter: { ORIGINATOR_ID: 'b24hub', ORIGIN_ID: s.idempotency_key }, select: ['ID', 'ASSIGNED_BY_ID', 'CONTACT_ID', 'COMPANY_ID'] }),\n};\nif (n.contact.phone) {\n  cmd.phone = 'crm.duplicate.findbycomm?' + qs({ type: 'PHONE', values: [n.contact.phone], entity_type: 'CONTACT' });\n  cmd.owner_p = 'crm.contact.get?id=$result[phone][CONTACT][0]';\n}\nif (n.contact.email) {\n  cmd.email = 'crm.duplicate.findbycomm?' + qs({ type: 'EMAIL', values: [n.contact.email], entity_type: 'CONTACT' });\n  cmd.owner_e = 'crm.contact.get?id=$result[email][CONTACT][0]';\n}\nif (n.company.inn_valid) {\n  cmd.company = 'crm.requisite.list?' + qs({ filter: { RQ_INN: n.company.inn, ENTITY_TYPE_ID: 4 }, select: ['ENTITY_ID'] });\n  cmd.owner_c = 'crm.company.get?id=$result[company][0][ENTITY_ID]';\n}\nreturn [{ json: { method: 'batch', params: { halt: 0, cmd }, caller_workflow: $workflow.name, caller_execution_id: $execution.id, state: s } }];\n"
+      },
+      "position": [
+        1820,
+        400
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "id": "2fdf8296-78d1-54f2-8b82-0a1953dad113",
+      "name": "Prepare repair",
+      "parameters": {
+        "jsCode": "function qs(obj, prefix) {\n  return Object.entries(obj).filter(([, v]) => v !== undefined && v !== null).map(([k, v]) => {\n    const key = prefix ? `${prefix}[${k}]` : k;\n    if (v && typeof v === 'object' && !('raw' in v)) return qs(v, key);\n    const val = (v && typeof v === 'object') ? v.raw : encodeURIComponent(String(v));\n    return `${key}=${val}`;\n  }).filter(Boolean).join('&');\n}\n\n// A previous attempt created the deal but may have failed before task / SLA item / comment.\nconst s = $json.state;\nconst dealId = Number(s.crm.deal.ID);\nconst cmd = {\n  tasks: 'tasks.task.list?' + qs({ filter: { UF_CRM_TASK: 'D_' + dealId }, select: ['ID'] }),\n  sla: 'crm.item.list?' + qs({ entityTypeId: s.cfg.sla_entity_type_id, filter: { parentId2: dealId }, select: ['id'] }),\n  comments: 'crm.timeline.comment.list?' + qs({ filter: { ENTITY_ID: dealId, ENTITY_TYPE: 'deal' }, select: ['ID', 'COMMENT'] }),\n};\nreturn [{ json: { method: 'batch', params: { halt: 0, cmd }, caller_workflow: $workflow.name, caller_execution_id: $execution.id } }];\n"
+      },
+      "position": [
+        2820,
+        300
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "id": "ce340aa9-d66b-5727-8254-6b6492ddf3e5",
+      "name": "Rejected?",
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "ba825157-801b-5801-9ab9-0002bddaa618",
+              "leftValue": "={{ !!$json.norm.reject_reason }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        600,
+        300
+      ],
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2
+    },
+    {
+      "credentials": {
+        "postgres": {
+          "name": "B24HUB Postgres"
+        }
+      },
+      "id": "c0d37611-58b6-57f1-9bd4-746335f183c6",
+      "name": "Route",
+      "parameters": {
+        "operation": "executeQuery",
+        "options": {
+          "queryReplacement": "={{ [JSON.stringify($json), $json.inbox_id, $json.route_region, $json.norm.score.topic === 'other' ? $json.norm.product : $json.norm.score.topic, $json.crm.owner_id] }}"
+        },
+        "query": "SELECT $1::jsonb || jsonb_build_object('route', to_jsonb(r)) AS state\n  FROM route_lead($2::bigint, $3, $4, $5::int) r"
+      },
+      "position": [
+        2420,
+        400
+      ],
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6
+    },
+    {
+      "id": "fd1fda3b-7534-56e7-8eeb-bce61bba3478",
+      "name": "Start",
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "position": [
+        0,
+        300
+      ],
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1
+    },
+    {
+      "credentials": {
+        "postgres": {
+          "name": "B24HUB Postgres"
+        }
+      },
+      "id": "421ce4f0-55ea-5a8b-97d7-c006724a2ffe",
+      "name": "Store DaData",
+      "parameters": {
+        "operation": "executeQuery",
+        "options": {
+          "queryReplacement": "={{ [$json.state.norm.company.inn, $json.found, JSON.stringify($json.state.dadata ?? {}), $json.store, JSON.stringify($json.state)] }}"
+        },
+        "query": "WITH ins AS (\n  INSERT INTO dadata_cache (inn, found, data)\n  SELECT $1, $2::boolean, $3::jsonb WHERE $4::boolean\n  ON CONFLICT (inn) DO UPDATE SET found = EXCLUDED.found, data = EXCLUDED.data, fetched_at = now()\n  RETURNING 1\n)\nSELECT $5::jsonb AS state"
+      },
+      "position": [
+        1620,
+        300
+      ],
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6
+    },
+    {
+      "id": "f2fe4e66-9d15-5310-b061-ae32f5f0bf8b",
+      "name": "b24: create",
+      "parameters": {
+        "mode": "each",
+        "options": {
+          "waitForSubWorkflow": true
+        },
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "@name:[B24HUB] lib b24_call"
+        }
+      },
+      "position": [
+        3420,
+        400
+      ],
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1
+    },
+    {
+      "id": "6ccd0ab5-2a52-5f7f-8b73-bb5a94af5550",
+      "name": "b24: lookup",
+      "parameters": {
+        "mode": "each",
+        "options": {
+          "waitForSubWorkflow": true
+        },
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "@name:[B24HUB] lib b24_call"
+        }
+      },
+      "position": [
+        2020,
+        400
+      ],
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1
+    },
+    {
+      "id": "16d3d175-43a3-5c9d-a13f-18d0a654a54b",
+      "name": "b24: repair lookup",
+      "parameters": {
+        "mode": "each",
+        "options": {
+          "waitForSubWorkflow": true
+        },
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "@name:[B24HUB] lib b24_call"
+        }
+      },
+      "position": [
+        3020,
+        300
+      ],
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1
+    }
+  ],
+  "settings": {
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "@name:[B24HUB] 99 error handler",
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all"
+  }
+}
