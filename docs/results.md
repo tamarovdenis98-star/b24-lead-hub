@@ -51,3 +51,49 @@ verified against the failure simulator instead.
 ### Export hygiene
 `scripts/export_workflows.sh`: deploy → export → deploy → export produces byte-identical files.
 `scripts/check_exports.py` and a grep for the 8 real secret values in the tree: clean.
+
+## Stage 2 — processing, functional checks (real portal, one lead at a time)
+| Case | Result | 02a execution |
+|---|---|---|
+| Moscow lead with a real INN | company + requisite (DaData: ПАО СБЕРБАНК, ACTIVE) + contact + deal + task + SLA item + comment in **one batch**; rule #2, 6.7 s from intake to CRM | 380 |
+| `+7 (921) 555-01-02 доб. 15`, bad INN checksum, "Срочно … 1С, бюджет 300 тыс" | phone → `+79215550102`, INN dropped with a warning, score `integration / high / 300000`, SLA 15 min | 397 |
+| same client again by phone, from Telegram | contact reused (`matched_by: phone`), "own client" rule → same manager, new deal | 406 |
+| phone `123`, e-mail `not-an-email` | `rejected`, never retried | 409 |
+| SLA item create fails (bad entity type) | lead `failed`, retry in 1 min, alert; next attempt completes, **1 deal** | 421 → 429 |
+| orphan deal with the lead's ORIGIN_ID created by hand (simulated crash) | found by ORIGIN_ID; only task + SLA item + comment created (`repaired: true`), no second deal | inbox #6 |
+| lock held on the client's phone by "another worker" | lead deferred twice without spending attempts, finished after release, contact reused | inbox #3 (2nd set) |
+
+Idle-system time from intake to CRM on these single leads: 6.7–14.9 s (one 15-second polling tick + two batch calls).
+
+<!-- replay:start -->
+## Stage 2 — load replay `r1021a` (2026-10-21 11:04 UTC)
+
+`python scripts/replay_load.py` → 500 requests through the public intake
+(concurrency 8, from a laptop over the internet): 350 unique, 100 resends
+of earlier requests (20%), 50 invalid (10%: half fail the schema, half carry unusable contacts).
+
+| Metric | Value |
+|---|---|
+| **Duplicate deals in CRM** | **0** |
+| **Duplicate contacts in CRM** (same phone/e-mail) | **0** |
+| Duplicate companies (same INN) | 0 |
+| Processed (done + rejected) / accepted | **100.0%** (350 + 25 of 375; expected rows 375) |
+| Failed (no attempts left) | 0 |
+| Intake answers | 375 new, 100 duplicate, HTTP {'200': 475, '422': 25} |
+| Intake latency | p50 2942 ms, p95 4542 ms |
+| Time from intake to deal+task+SLA in CRM | p50 242.3 s, **p95 377.6 s**, max 551.7 s |
+| Bitrix24 REST calls (batch counts as 1) | 700 |
+| Retries on limits (`QUERY_LIMIT_EXCEEDED` / `OPERATION_TIME_LIMIT`) | 0  |
+| All Bitrix24 retries / non-ok responses | 0 / 0 |
+| Leads retried / repaired after partial create | 0 / 0 |
+| Routing: deals per manager / "own client" rule | {'16': 116, '20': 117, '18': 117} / 101 |
+| DaData calls / cache hits | 85 / 81 |
+| Deals created in this run / missing in CRM | 350 / 0 |
+| Errors logged by error handler during the run | 0 |
+| Wall time (send + process) | 611.2 s |
+
+Where the time to CRM goes: leads arrived at 1.91/s and were processed at
+0.62/s (1.23 Bitrix24 calls/s against the 2/s throttle; average call
+716 ms). So the p95 is mostly **queue wait** behind a burst, and the bottleneck is sequential
+per-worker processing on 1 vCPU, not the Bitrix24 limit.
+<!-- replay:end -->

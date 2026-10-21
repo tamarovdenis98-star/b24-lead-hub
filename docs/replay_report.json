@@ -1,0 +1,71 @@
+{
+  "run_id": "r1021a",
+  "started_utc": "2026-10-21 11:04",
+  "requests": 500,
+  "kinds": {
+    "duplicate": 100,
+    "unique": 350,
+    "invalid_schema": 25,
+    "invalid_data": 25
+  },
+  "http": {
+    "200": 475,
+    "422": 25
+  },
+  "intake_new": 375,
+  "intake_duplicate": 100,
+  "intake_latency_ms": {
+    "p50": 2942,
+    "p95": 4542,
+    "max": 19041
+  },
+  "inbox_rows": 375,
+  "expected_rows": 375,
+  "done": 350,
+  "rejected": 25,
+  "failed": 0,
+  "processed_pct": 100.0,
+  "leads_retried": 0,
+  "repaired": 0,
+  "time_to_crm_s": {
+    "p50": 242.3,
+    "p95": 377.6,
+    "max": 551.7
+  },
+  "send_s": 202.0,
+  "wall_s": 611.2,
+  "crm": {
+    "deals": 350,
+    "duplicate_deals": 0,
+    "duplicate_contacts": 0,
+    "duplicate_companies": 0,
+    "deals_missing_in_crm": 0,
+    "contacts_total": 319,
+    "companies_total": 85
+  },
+  "routing": {
+    "by_manager": {
+      "16": 116,
+      "20": 117,
+      "18": 117
+    },
+    "own_client_rule": 101
+  },
+  "b24": {
+    "calls": 700,
+    "retries": 0,
+    "limit_hits": {},
+    "errors": {}
+  },
+  "dadata": {
+    "calls": 85,
+    "cache_hits": 81
+  },
+  "errors_logged": 0,
+  "rates": {
+    "arrival_per_s": 1.91,
+    "processing_per_s": 0.62,
+    "b24_calls_per_s": 1.23,
+    "b24_avg_ms": 716
+  }
+}
