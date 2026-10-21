@@ -1,6 +1,6 @@
 # b24-lead-hub — Lead Intake & SLA Hub for Bitrix24
 
-> Work in progress. Stages 1–2 of 5 are done: intake, REST wrapper, error handling, processing pipeline,
+> Work in progress. Stages 1–3 of 5 are done: intake, REST wrapper, error handling, processing pipeline,
 > SLA smart process, load replay (500 requests → 0 duplicates in CRM, see [docs/results.md](docs/results.md)).
 > The full README (problem → solution → measured results) comes in stage 5.
 
@@ -11,6 +11,8 @@
 | `[B24HUB] lib b24_call` | The only path to Bitrix24: global ≤2 rps throttle, errors parsed from the body even on HTTP 200, exponential backoff on `QUERY_LIMIT_EXCEEDED` / `OPERATION_TIME_LIMIT`, every attempt journaled with `time.operating`. |
 | `[B24HUB] 02 process` | Every 15 s: claims up to 10 inbox rows with `FOR UPDATE SKIP LOCKED`, runs each through `02a`, failed → backoff 1/2/4/8 min, 5 attempts. |
 | `[B24HUB] 02a process lead` | Normalize (E.164, e-mail, INN checksum) → per-client lock → DaData (cached) → one lookup batch (`crm.duplicate.findbycomm`, company by INN, own deal by `ORIGIN_ID`) → routing (`route_lead()`: own client → own manager, rules, least loaded) → one create batch: company + requisite + contact + deal + task + SLA item (`crm.item.add`) + timeline comment. Re-runs repair a half-created lead instead of duplicating it. |
+| `[B24HUB] 03 sla watcher` | Every minute: overdue SLAs → `im.notify.system.add` to manager and head of sales, SLA item → «SLA нарушен», one Telegram digest. Dry-run switch, ≤10 escalations per run, breaker for mass overdue ([ADR 0008](docs/adr/0008-sla-watcher-safety.md)). |
+| `[B24HUB] 04 b24 events` | Outbound webhook `ONCRMDEALUPDATE`: `auth[application_token]` check (403), re-reads the deal with `crm.deal.get`, closes the SLA as met / breached. |
 | `[B24HUB] 99 error handler` | Error Workflow for all of the above: `errors` table + Telegram alert with a link to the execution. |
 | `[B24HUB] 90 test harness`, `91 b24 mock` | Test entry point for the lib, and a deterministic Bitrix24 failure simulator (inactive by default). |
 

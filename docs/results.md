@@ -65,6 +65,20 @@ verified against the failure simulator instead.
 
 Idle-system time from intake to CRM on these single leads: 6.7–14.9 s (one 15-second polling tick + two batch calls).
 
+### Defect found after the stage-2 replay (fixed in stage 3)
+`scripts/check_crm_links.py` showed that in the replay run **319 of 350 deals pointed to the wrong
+contact, 85 to the wrong company, and no SLA item was linked to its deal**. No duplicates were created
+(the numbers below stay true), but the links were wrong.
+
+Cause: `lib b24_call` passed its input through Postgres as `jsonb`, and `jsonb` reorders object keys
+(shorter first). The batch `cmd` `{company, requisite, contact, deal, …}` reached Bitrix24 as
+`{sla, deal, task, …, contact}`, so `deal` ran before `$result[contact]` existed.
+It was reproduced through n8n and not reproduced by the same body sent from Python.
+Fix: the lib passes its state as `text` (`lib_b24_call.json`, node "Acquire slot"). The same 7-command
+batch through n8n then linked contact, company and SLA item correctly (harness execution 2321).
+The 40 deals kept for screenshots were repaired with `check_crm_links.py --fix` (40/40 ok).
+The replay will be re-run with the link check in stage 5.
+
 <!-- replay:start -->
 ## Stage 2 — load replay `r1021a` (2026-10-21 11:04 UTC)
 
@@ -97,3 +111,26 @@ Where the time to CRM goes: leads arrived at 1.91/s and were processed at
 716 ms). So the p95 is mostly **queue wait** behind a burst, and the bottleneck is sequential
 per-worker processing on 1 vCPU, not the Bitrix24 limit.
 <!-- replay:end -->
+
+## Stage 3 — SLA watcher and Bitrix24 events (2026-10-21)
+
+### `[B24HUB] 03 sla watcher` (14 test leads, 12 made overdue by moving `sla_due`)
+| Check | Result |
+|---|---|
+| dry run, before any test data (runs 1–2) | `idle`, due 0 — **0 escalations would be sent** |
+| dry run with 12 overdue (run 4) | `dry_run`, due 12, planned 10 (limit), nothing escalated |
+| breaker = 5 (runs 5–6) | `breaker` twice, **one** Telegram warning (gate at 12:12:23), 0 escalations |
+| limit = 10 (runs 7–8) | 10 escalated at 12:14:23, 2 at 12:15:23; 12 `batch` calls ok; 12 SLA items → «SLA нарушен»; 2 in-time items untouched |
+
+### `[B24HUB] 04 b24 events` (outbound-webhook format, form-urlencoded)
+| Case | Result | Execution |
+|---|---|---|
+| wrong `auth[application_token]` | `403` | — |
+| deal not created by the hub | `200`, ignored | — |
+| our deal, still in stage NEW | `200`, SLA stays open | — |
+| deal 782 → PREPARATION within SLA | SLA `met`, item → «Ответ в срок», response 6 min | 2513 |
+| escalated deal 758 → EXECUTING | SLA closed as `breached` | 2516 |
+| same event again | no change (SLA already closed) | — |
+| `ONCRMDEALADD` | ignored | — |
+
+Test deals were removed afterwards (`cleanup_demo.py --keep-deals`, 56 entities); the portal holds the 40 demo deals.

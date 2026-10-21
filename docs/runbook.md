@@ -41,3 +41,19 @@ python scripts/cleanup_demo.py --yes      # delete them
 docker exec b24hub-postgres psql -U b24hub_owner -d b24hub -c \
   "TRUNCATE inbox, intake_rejects, assignments, lead_events, b24_call_log, errors, client_locks, dadata_cache RESTART IDENTITY CASCADE"
 ```
+
+## SLA watcher controls
+```sql
+UPDATE settings SET value = 'true'  WHERE key = 'sla_watch_dry_run';       -- stop sending, keep counting
+UPDATE settings SET value = '10'    WHERE key = 'sla_escalation_limit';    -- escalations per minute
+UPDATE settings SET value = '50'    WHERE key = 'sla_escalation_breaker';  -- mass-overdue threshold
+SELECT * FROM sla_watch_runs ORDER BY id DESC LIMIT 20;                    -- what it did / would do
+```
+Before switching dry run off on a portal with history, check `SELECT count(*) FROM assignments WHERE
+sla_status = 'open' AND sla_due < now()` — every row is an escalation.
+
+## Check CRM links against the journal
+```bash
+python scripts/check_crm_links.py            # deal -> contact / company, SLA item -> deal
+python scripts/check_crm_links.py --fix      # repair from inbox.result
+```
