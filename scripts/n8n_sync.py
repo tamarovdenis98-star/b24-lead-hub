@@ -203,7 +203,8 @@ def cmd_export() -> None:
             "connections": wf["connections"], "settings": settings,
         }
         path = WF_DIR / f"{slug(name)}.json"
-        path.write_text(json.dumps(out, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        path.write_text(json.dumps(out, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+                        encoding="utf-8", newline="\n")
         print(f"export {name} -> {path.relative_to(ROOT)}")
 
 
