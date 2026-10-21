@@ -1,0 +1,564 @@
+{
+  "active": true,
+  "connections": {
+    "Build result": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "b24: event.send",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Cached?": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Build result",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "DaData findById",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Check INN": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "INN valid?",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "DaData cache": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Cached?",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "DaData findById": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Parse DaData",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "INN valid?": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "DaData cache",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Build result",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Journal": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Check sent",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Parse": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Verify token",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Parse DaData": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Store DaData",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Respond 200": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Check INN",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Robot call": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Parse",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Store DaData": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Build result",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Token ok?": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Respond 200",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Respond 403",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Verify token": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Token ok?",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "b24: event.send": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Journal",
+            "type": "main"
+          }
+        ]
+      ]
+    }
+  },
+  "name": "[B24HUB] 05a robot inn check",
+  "nodes": [
+    {
+      "id": "2e48fb07-34d8-5171-b0a7-4df88a7ccad2",
+      "name": "Build result",
+      "parameters": {
+        "jsCode": "// Same item shape from all three paths: invalid INN, cache hit, fresh DaData.\nconst r = $json.r ?? $json;\nlet rv;\nif (!r.inn_valid) rv = { CHECK_RESULT: 'invalid_inn', IS_ACTIVE: 'N' };\nelse if (r.dadata_error) rv = { CHECK_RESULT: 'dadata_unavailable', IS_ACTIVE: 'N' };\nelse if (!r.cached?.found) rv = { CHECK_RESULT: 'not_found', IS_ACTIVE: 'N' };\nelse {\n  const d = r.cached.data;\n  rv = { CHECK_RESULT: d.status === 'ACTIVE' ? 'active' : String(d.status ?? 'unknown').toLowerCase(), COMPANY_NAME: d.name,\n         STATUS: d.status, IS_ACTIVE: d.status === 'ACTIVE' ? 'Y' : 'N', KPP: d.kpp, OGRN: d.ogrn, ADDRESS: d.address };\n}\nconst log = `b24-lead-hub: ИНН ${r.inn} → ${rv.CHECK_RESULT}${rv.COMPANY_NAME ? ' (' + rv.COMPANY_NAME + ')' : ''}`;\nreturn [{ json: { method: 'bizproc.event.send', auth: 'app', caller_workflow: $workflow.name, caller_execution_id: $execution.id,\n                  params: { EVENT_TOKEN: r.event_token, RETURN_VALUES: rv, LOG_MESSAGE: log },\n                  run: { document_id: r.document_id, inn: r.inn, result: rv } } }];\n"
+      },
+      "position": [
+        2640,
+        200
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "id": "5b1f9189-6e65-51fc-a761-4a50c2ae3433",
+      "name": "Cached?",
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "20a8c4ba-884f-5602-b4ce-de9f4fbe040c",
+              "leftValue": "={{ !!$json.r.cached }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        1760,
+        120
+      ],
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2
+    },
+    {
+      "id": "f174d5de-81c7-5c5c-a0a7-1f3ce29802b7",
+      "name": "Check INN",
+      "parameters": {
+        "jsCode": "function innValid(inn) {\n  const s = String(inn ?? '').trim();\n  if (!/^(\\d{10}|\\d{12})$/.test(s)) return false;\n  const d = s.split('').map(Number);\n  const chk = (w) => (w.reduce((acc, k, i) => acc + k * d[i], 0) % 11) % 10;\n  if (s.length === 10) return chk([2, 4, 10, 3, 5, 9, 4, 6, 8]) === d[9];\n  return chk([7, 2, 4, 10, 3, 5, 9, 4, 6, 8]) === d[10] && chk([3, 7, 2, 4, 10, 3, 5, 9, 4, 6, 8]) === d[11];\n}\n\nconst r = $json.r;\nreturn [{ json: { ...r, inn_valid: innValid(r.inn) } }];\n"
+      },
+      "position": [
+        1100,
+        200
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "id": "671c2779-9f90-5c9c-baa2-0893cbb8d591",
+      "name": "Check sent",
+      "parameters": {
+        "jsCode": "const r = $('b24: event.send').first().json;\nif (!r.ok) throw new Error(`bizproc.event.send failed: ${r.error_code} ${r.error_description ?? ''}`);\nreturn [{ json: { ok: true } }];\n"
+      },
+      "position": [
+        3300,
+        200
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "credentials": {
+        "postgres": {
+          "name": "B24HUB Postgres"
+        }
+      },
+      "id": "056c1412-dfa2-5d9a-b37f-afb24507eff5",
+      "name": "DaData cache",
+      "parameters": {
+        "operation": "executeQuery",
+        "options": {
+          "queryReplacement": "={{ [JSON.stringify($json), $json.inn] }}"
+        },
+        "query": "SELECT $1::jsonb || jsonb_build_object(\n  'cached', (SELECT row_to_json(c) FROM (SELECT found, data FROM dadata_cache WHERE inn = $2 AND fetched_at > now() - interval '30 days') c)) AS r"
+      },
+      "position": [
+        1540,
+        120
+      ],
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6
+    },
+    {
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "B24HUB DaData"
+        }
+      },
+      "id": "836cecb3-0989-5493-aa9c-2e357b736b94",
+      "maxTries": 3,
+      "name": "DaData findById",
+      "parameters": {
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "jsonBody": "={{ JSON.stringify({ query: $json.r.inn, count: 1 }) }}",
+        "method": "POST",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          },
+          "timeout": 15000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "url": "https://suggestions.dadata.ru/suggestions/api/4_1/rs/findById/party"
+      },
+      "position": [
+        1980,
+        40
+      ],
+      "retryOnFail": true,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "waitBetweenTries": 2000
+    },
+    {
+      "id": "466e5e2c-5113-5d68-82ba-077829f8ed6d",
+      "name": "INN valid?",
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "52bb50a3-0e4c-59cd-a682-1ca8cecd9228",
+              "leftValue": "={{ $json.inn_valid }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        1320,
+        200
+      ],
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2
+    },
+    {
+      "credentials": {
+        "postgres": {
+          "name": "B24HUB Postgres"
+        }
+      },
+      "id": "98710a73-179e-5a0d-b22b-0d002a224cc3",
+      "name": "Journal",
+      "parameters": {
+        "operation": "executeQuery",
+        "options": {
+          "queryReplacement": "={{ [$('Build result').first().json.run.document_id ?? '', $('Build result').first().json.run.inn, JSON.stringify($('Build result').first().json.run.result), $json.ok === true, $execution.id] }}"
+        },
+        "query": "WITH run AS (\n  INSERT INTO robot_runs (document_id, inn, result, event_sent, execution_id) VALUES ($1, $2, $3::jsonb, $4, $5) RETURNING id\n), ev AS (\n  INSERT INTO lead_events (inbox_id, deal_id, step, detail, execution_id)\n  SELECT a.inbox_id, a.deal_id, 'robot_inn_check',\n         jsonb_build_object('inn', $2, 'check_result', $3::jsonb->>'CHECK_RESULT', 'company_name', $3::jsonb->>'COMPANY_NAME', 'event_sent', $4), $5\n    FROM assignments a WHERE 'DEAL_' || a.deal_id = $1\n  RETURNING 1\n) SELECT (SELECT id FROM run) AS run_id, (SELECT count(*) FROM ev) AS lead_events"
+      },
+      "position": [
+        3080,
+        200
+      ],
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6
+    },
+    {
+      "id": "57161899-8997-5c04-8918-42de77218e57",
+      "name": "Parse",
+      "parameters": {
+        "jsCode": "// Robot handler POST (form-urlencoded): event_token, document_id[], properties[INN], auth[application_token], auth[member_id].\nconst b = $json.body ?? {};\nconst g = (nested, flat) => nested ?? b[flat] ?? null;\nconst doc = Array.isArray(b.document_id) ? b.document_id[2] : (b.document_id?.[2] ?? b['document_id[2]'] ?? null);\nreturn [{ json: { event_token: b.event_token ?? null, inn: String(g(b.properties?.INN, 'properties[INN]') ?? '').trim(),\n                  document_id: doc, token: g(b.auth?.application_token, 'auth[application_token]'),\n                  member_id: g(b.auth?.member_id, 'auth[member_id]') } }];\n"
+      },
+      "position": [
+        220,
+        300
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "id": "73bf27de-94b7-52b0-a6e9-7e3b10035824",
+      "name": "Parse DaData",
+      "parameters": {
+        "jsCode": "const r = $('DaData cache').first().json.r;\nconst status = Number($json.statusCode ?? 0);\nif (status !== 200) return [{ json: { ...r, dadata_error: `HTTP ${status}`, store: false } }];\nconst sug = ($json.body?.suggestions ?? [])[0], d = sug?.data;\nconst data = d ? { name: sug.value, full_name: d.name?.full_with_opf ?? null, type: d.type ?? null, kpp: d.kpp ?? null,\n  ogrn: d.ogrn ?? null, status: d.state?.status ?? null, region: d.address?.data?.region ?? null,\n  region_with_type: d.address?.data?.region_with_type ?? null, address: d.address?.value ?? null, okved: d.okved ?? null } : {};\nreturn [{ json: { ...r, cached: { found: !!d, data }, store: true } }];\n"
+      },
+      "position": [
+        2200,
+        40
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "id": "3d64c281-04e1-536d-bba9-74bee75777a3",
+      "name": "Respond 200",
+      "parameters": {
+        "options": {
+          "responseCode": 200
+        },
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: true }) }}"
+      },
+      "position": [
+        880,
+        200
+      ],
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4
+    },
+    {
+      "id": "730867ad-3d3b-5a11-acef-887f685c1642",
+      "name": "Respond 403",
+      "parameters": {
+        "options": {
+          "responseCode": 403
+        },
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: false }) }}"
+      },
+      "position": [
+        880,
+        460
+      ],
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4
+    },
+    {
+      "id": "99c1a2cd-8a85-5cfb-93af-fc64e71b6ae9",
+      "name": "Robot call",
+      "parameters": {
+        "httpMethod": "POST",
+        "options": {},
+        "path": "b24hub/app/robot",
+        "responseMode": "responseNode"
+      },
+      "position": [
+        0,
+        300
+      ],
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "webhookId": "4b734efb-b0ef-5fd2-b590-77943ab84896"
+    },
+    {
+      "credentials": {
+        "postgres": {
+          "name": "B24HUB Postgres"
+        }
+      },
+      "id": "fbc3f9ff-8036-5ac7-af90-75211d896950",
+      "name": "Store DaData",
+      "parameters": {
+        "operation": "executeQuery",
+        "options": {
+          "queryReplacement": "={{ [$json.inn, !!$json.cached?.found, JSON.stringify($json.cached?.data ?? {}), $json.store, JSON.stringify($json)] }}"
+        },
+        "query": "WITH ins AS (\n  INSERT INTO dadata_cache (inn, found, data) SELECT $1, $2::boolean, $3::jsonb WHERE $4::boolean\n  ON CONFLICT (inn) DO UPDATE SET found = EXCLUDED.found, data = EXCLUDED.data, fetched_at = now() RETURNING 1\n) SELECT $5::jsonb AS r"
+      },
+      "position": [
+        2420,
+        40
+      ],
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6
+    },
+    {
+      "id": "f94fc475-61b8-58a4-ad7a-753f03dec5c1",
+      "name": "Token ok?",
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "15327ea7-6fd5-5cf2-81e6-b249a5f25a36",
+              "leftValue": "={{ $json.r.valid && !!$json.r.event_token }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        660,
+        300
+      ],
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2
+    },
+    {
+      "credentials": {
+        "postgres": {
+          "name": "B24HUB Postgres"
+        }
+      },
+      "id": "35db0060-041d-51a1-941c-0e53fecac167",
+      "name": "Verify token",
+      "parameters": {
+        "operation": "executeQuery",
+        "options": {
+          "queryReplacement": "={{ [JSON.stringify({ event_token: $json.event_token, inn: $json.inn, document_id: $json.document_id }), $json.token ?? '', $json.member_id ?? ''] }}"
+        },
+        "query": "SELECT $1::jsonb || jsonb_build_object(\n  'valid', EXISTS (SELECT 1 FROM b24_app WHERE status = 'installed' AND application_token = $2 AND member_id = $3)) AS r"
+      },
+      "position": [
+        440,
+        300
+      ],
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6
+    },
+    {
+      "id": "3a1f5c38-adc9-5db8-9571-566cb26b1c08",
+      "name": "b24: event.send",
+      "parameters": {
+        "mode": "each",
+        "options": {
+          "waitForSubWorkflow": true
+        },
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "@name:[B24HUB] lib b24_call"
+        }
+      },
+      "position": [
+        2860,
+        200
+      ],
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1
+    }
+  ],
+  "settings": {
+    "errorWorkflow": "@name:[B24HUB] 99 error handler",
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all"
+  }
+}
