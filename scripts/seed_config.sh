@@ -5,6 +5,8 @@
 #   B24_ROP_ID       -> settings.rop_user_id (head of sales, gets SLA escalations)
 #   B24_MANAGERS     -> managers + demo routing table (sql/seed/routing_demo.sql), if exactly 3 ids
 #   CRM_TITLE_PREFIX -> settings.crm_title_prefix (e.g. "[DEMO] " on a demo portal)
+#   B24_PORTAL       -> settings.portal_url (links in alerts)
+#   B24_OUTBOUND_TOKEN -> b24_auth.outbound_token (application_token of the outbound webhook), optional
 # Run on the host where the stack is up: ./scripts/seed_config.sh
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -14,10 +16,13 @@ set -a; . ./.env; set +a
 case "$B24_WEBHOOK" in */) ;; *) B24_WEBHOOK="$B24_WEBHOOK/";; esac
 PSQL=(docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -q -U "$POSTGRES_USER" -d "$POSTGRES_DB")
 
-"${PSQL[@]}" -v url="$B24_WEBHOOK" -v chat="$TG_CHAT_ID" -v rop="${B24_ROP_ID:-}" -v prefix="${CRM_TITLE_PREFIX:-}" <<'SQL'
+"${PSQL[@]}" -v url="$B24_WEBHOOK" -v chat="$TG_CHAT_ID" -v rop="${B24_ROP_ID:-}" -v prefix="${CRM_TITLE_PREFIX:-}"   -v portal="${B24_PORTAL:-}" -v outbound="${B24_OUTBOUND_TOKEN:-}" <<'SQL'
 INSERT INTO b24_auth (id, mode, base_url) VALUES (1, 'webhook', :'url')
 ON CONFLICT (id) DO UPDATE SET mode = 'webhook', base_url = EXCLUDED.base_url, updated_at = now();
+UPDATE b24_auth SET outbound_token = nullif(:'outbound', '') WHERE id = 1 AND nullif(:'outbound', '') IS NOT NULL;
 INSERT INTO settings (key, value) VALUES ('alert_chat_id', :'chat'), ('rop_user_id', :'rop'), ('crm_title_prefix', :'prefix')
+ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now();
+INSERT INTO settings (key, value) VALUES ('portal_url', rtrim(:'portal', '/'))
 ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now();
 SQL
 
