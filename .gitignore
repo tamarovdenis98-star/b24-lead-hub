@@ -11,3 +11,4 @@ __pycache__/
 # local artifacts
 /tmp/
 *.log
+sql/seed/portal_settings.sql
