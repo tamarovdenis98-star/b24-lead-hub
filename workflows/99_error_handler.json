@@ -1,0 +1,239 @@
+{
+  "active": true,
+  "connections": {
+    "Build alert": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Should alert?",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Build alert (DB down)": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Should alert?",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Normalize error",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Log error": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Build alert",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Build alert (DB down)",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Normalize error": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Log error",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Should alert?": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Send Telegram alert",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Muted",
+            "type": "main"
+          }
+        ]
+      ]
+    }
+  },
+  "name": "[B24HUB] 99 error handler",
+  "nodes": [
+    {
+      "id": "d0a20be3-2e2c-57cb-8243-ea6e5285cecb",
+      "name": "Build alert",
+      "parameters": {
+        "jsCode": "// DB is up: remember chat id in workflow static data so alerts still work when Postgres is down.\nconst e = $('Normalize error').first().json;\nconst db = $json;\nconst stat = $getWorkflowStaticData('global');\nif (db.chat_id) stat.chatId = db.chat_id;\nconst suppressAfter = Number(db.suppress_after ?? 3);\nconst recent = Number(db.recent_similar ?? 0);\nreturn [{ json: buildAlert(e, { chatId: db.chat_id || stat.chatId, errorId: db.error_id,\n  send: !e.is_subworkflow && recent < suppressAfter, lastBeforeSuppress: recent === suppressAfter - 1, windowMin: db.window_min }) }];\n\nfunction esc(s) { return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }\nfunction buildAlert(e, o) {\n  const lines = [\n    `🔴 <b>${esc(e.workflow_name)}</b>`,\n    `Node: <code>${esc(e.node_name || '—')}</code>`,\n    `Error: <code>${esc(e.error_message.slice(0, 700))}</code>`,\n    e.execution_url ? `Execution: <a href=\"${esc(e.execution_url)}\">#${esc(e.execution_id)}</a>` : 'Execution: — (trigger error)',\n    ...(e.sub_execution_url ? [`Sub-execution: <a href=\"${esc(e.sub_execution_url)}\">#${esc(e.sub_execution_id)}</a>`] : []),\n    o.errorId ? `errors.id = ${o.errorId}` : '⚠️ not logged: Postgres unavailable',\n  ];\n  if (o.lastBeforeSuppress) lines.push(`🔕 Further alerts for this node are muted for ${o.windowMin} min (still logged).`);\n  return { chat_id: o.chatId, text: lines.join('\\n'), send: o.send && !!o.chatId };\n}\n"
+      },
+      "position": [
+        680,
+        220
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "id": "afb131c3-4389-5098-9a28-0895508628e0",
+      "name": "Build alert (DB down)",
+      "parameters": {
+        "jsCode": "// Postgres failed: fall back to the chat id cached in static data by a previous successful run.\nconst e = $('Normalize error').first().json;\nconst stat = $getWorkflowStaticData('global');\nconst esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst text = [\n  `🔴 <b>${esc(e.workflow_name)}</b>`,\n  `Node: <code>${esc(e.node_name || '—')}</code>`,\n  `Error: <code>${esc(e.error_message.slice(0, 700))}</code>`,\n  e.execution_url ? `Execution: <a href=\"${esc(e.execution_url)}\">#${esc(e.execution_id)}</a>` : 'Execution: —',\n  ...(e.sub_execution_url ? [`Sub-execution: <a href=\"${esc(e.sub_execution_url)}\">#${esc(e.sub_execution_id)}</a>`] : []),\n  `⚠️ not logged: Postgres unavailable (${esc(String($json.error?.message ?? $json.message ?? '').slice(0, 200))})`,\n].join('\\n');\nreturn [{ json: { chat_id: stat.chatId, text, send: !!stat.chatId && !e.is_subworkflow } }];\n"
+      },
+      "position": [
+        680,
+        420
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "id": "1b45c1b3-9719-5386-884b-5b0e3a248aad",
+      "name": "Error Trigger",
+      "parameters": {},
+      "position": [
+        0,
+        300
+      ],
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1
+    },
+    {
+      "credentials": {
+        "postgres": {
+          "name": "B24HUB Postgres"
+        }
+      },
+      "id": "dc7ee2b7-eec8-55fb-9420-738190c8997c",
+      "name": "Log error",
+      "onError": "continueErrorOutput",
+      "parameters": {
+        "operation": "executeQuery",
+        "options": {
+          "queryReplacement": "={{ [$json.workflow_id, $json.workflow_name, $json.execution_id, $json.execution_url, $json.node_name, $json.error_message, $json.error_stack, JSON.stringify($json.context)] }}"
+        },
+        "query": "WITH ins AS (\n  INSERT INTO errors (workflow_id, workflow_name, execution_id, execution_url, node_name, error_message, error_stack, context)\n  VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)\n  RETURNING id\n)\nSELECT (SELECT id FROM ins) AS error_id,\n       (SELECT count(*) FROM errors e\n         WHERE e.workflow_id IS NOT DISTINCT FROM $1 AND e.node_name IS NOT DISTINCT FROM $5\n           AND e.occurred_at > now() - make_interval(mins => (SELECT value::int FROM settings WHERE key = 'alert_window_min')))::int AS recent_similar,\n       (SELECT value::int FROM settings WHERE key = 'alert_suppress_after') AS suppress_after,\n       (SELECT value FROM settings WHERE key = 'alert_window_min') AS window_min,\n       (SELECT value FROM settings WHERE key = 'alert_chat_id') AS chat_id"
+      },
+      "position": [
+        440,
+        300
+      ],
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6
+    },
+    {
+      "id": "6de763b9-272c-5344-b0a8-a73d1ebc9b1b",
+      "name": "Muted",
+      "parameters": {},
+      "position": [
+        1120,
+        440
+      ],
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1
+    },
+    {
+      "id": "4ccf46a2-d996-5e7d-8a8d-bf3de3a34c8d",
+      "name": "Normalize error",
+      "parameters": {
+        "jsCode": "// Error Trigger has two shapes: a failed execution, or a failed trigger node (no execution id/url).\nconst d = $json;\nconst ex = d.execution || {};\nconst err = ex.error || (d.trigger && d.trigger.error) || {};\n// A failed sub-workflow surfaces twice: in its own execution (mode \"integrated\") and in the parent.\n// Only the parent alerts; it carries a link to the sub-execution where the failing node is.\nconst isSub = ex.mode === 'integrated';\nconst subId = err.executionId && String(err.executionId) !== String(ex.id) ? String(err.executionId) : null;\nconst subUrl = subId && err.workflowId && ex.url\n  ? ex.url.replace(/\\/workflow\\/[^/]+\\/executions\\/[^/]+$/, `/workflow/${err.workflowId}/executions/${subId}`) : null;\nreturn [{ json: {\n  is_subworkflow: isSub,\n  sub_execution_id: subId,\n  sub_execution_url: subUrl,\n  workflow_id: d.workflow?.id ?? null,\n  workflow_name: d.workflow?.name ?? 'unknown',\n  execution_id: ex.id ?? null,\n  execution_url: ex.url ?? null,\n  node_name: ex.lastNodeExecuted ?? err.node?.name ?? d.trigger?.node?.name ?? null,\n  error_message: String(err.message ?? 'unknown error').slice(0, 2000),\n  error_stack: err.stack ? String(err.stack).slice(0, 8000) : null,\n  context: { mode: ex.mode ?? d.trigger?.mode ?? null, retryOf: ex.retryOf ?? null, sub_execution_id: subId,\n             description: err.description ?? null, httpCode: err.httpCode ?? null },\n}}];\n"
+      },
+      "position": [
+        220,
+        300
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "credentials": {
+        "telegramApi": {
+          "name": "B24HUB Telegram"
+        }
+      },
+      "id": "d0fc9a14-ee68-5e4d-a843-055038ed2636",
+      "maxTries": 4,
+      "name": "Send Telegram alert",
+      "parameters": {
+        "additionalFields": {
+          "appendAttribution": false,
+          "disable_web_page_preview": true,
+          "parse_mode": "HTML"
+        },
+        "chatId": "={{ $json.chat_id }}",
+        "text": "={{ $json.text }}"
+      },
+      "position": [
+        1120,
+        280
+      ],
+      "retryOnFail": true,
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "waitBetweenTries": 3000,
+      "webhookId": "a45ba85b-59aa-4550-a3e4-c5d3929035de"
+    },
+    {
+      "id": "94cbcec2-2a1c-54b5-89f4-959b733efd0d",
+      "name": "Should alert?",
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "9c31f56c-c010-5490-a715-c3c6ffbd224d",
+              "leftValue": "={{ $json.send }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        900,
+        300
+      ],
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2
+    }
+  ],
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all"
+  }
+}

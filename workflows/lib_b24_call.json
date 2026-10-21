@@ -1,0 +1,425 @@
+{
+  "active": true,
+  "connections": {
+    "Acquire slot": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Unwrap",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Backoff": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Next attempt",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Call Bitrix24": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Parse response",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Init": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Acquire slot",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Next attempt": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Acquire slot",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Parse response": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Log attempt",
+            "type": "main"
+          },
+          {
+            "index": 0,
+            "node": "Retry?",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Retry?": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Backoff",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Return",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Stamp": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Call Bitrix24",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Throttle?": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Wait for slot",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Stamp",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Unwrap": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Throttle?",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Wait for slot": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Stamp",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "When called": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Init",
+            "type": "main"
+          }
+        ]
+      ]
+    }
+  },
+  "name": "[B24HUB] lib b24_call",
+  "nodes": [
+    {
+      "credentials": {
+        "postgres": {
+          "name": "B24HUB Postgres"
+        }
+      },
+      "id": "ae876b46-a50e-5a96-85fc-b4dbf6802784",
+      "name": "Acquire slot",
+      "parameters": {
+        "operation": "executeQuery",
+        "options": {
+          "queryReplacement": "={{ [JSON.stringify($json)] }}"
+        },
+        "query": "SELECT $1::jsonb || jsonb_build_object(\n         'slot_at_ms',   floor(extract(epoch FROM rate_limit_reserve('b24')) * 1000),\n         'base_url',     a.base_url,\n         'auth_mode',    a.mode,\n         'access_token', a.access_token) AS state\n  FROM (SELECT 1) one LEFT JOIN b24_auth a ON a.id = 1"
+      },
+      "position": [
+        420,
+        300
+      ],
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6
+    },
+    {
+      "id": "f0e03e9a-659a-53ad-a877-aecd617e582e",
+      "name": "Backoff",
+      "parameters": {
+        "amount": "={{ $json.backoff_ms / 1000 }}"
+      },
+      "position": [
+        2060,
+        320
+      ],
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "webhookId": "65d6f9be-b6db-58f9-9550-5aa4b4ce2bd7"
+    },
+    {
+      "id": "559411a2-54f3-5d81-87d8-d7d973d16ad3",
+      "maxTries": 3,
+      "name": "Call Bitrix24",
+      "parameters": {
+        "jsonBody": "={{ JSON.stringify($json.auth_mode === 'oauth' ? { ...$json.params, auth: $json.access_token } : $json.params) }}",
+        "method": "POST",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          },
+          "timeout": 30000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "url": "={{ $json.base_url + $json.method + '.json' }}"
+      },
+      "position": [
+        1420,
+        300
+      ],
+      "retryOnFail": true,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "waitBetweenTries": 1000
+    },
+    {
+      "id": "7f57c2bc-8891-56c2-9d10-d69229c7cca4",
+      "name": "Init",
+      "parameters": {
+        "jsCode": "// Contract: exactly one item {method, params?, caller_workflow?, caller_execution_id?, max_attempts?}.\n// Callers use Execute Workflow with mode \"each\".\nconst items = $input.all();\nif (items.length !== 1) throw new Error(`lib b24_call expects 1 item, got ${items.length}`);\nconst i = items[0].json;\nif (!i.method || !/^[a-z0-9_.]+$/i.test(i.method)) throw new Error(`invalid Bitrix24 method: ${i.method}`);\nreturn [{ json: {\n  method: i.method,\n  params: i.params ?? {},\n  caller_workflow: i.caller_workflow ?? null,\n  caller_execution_id: i.caller_execution_id ?? null,\n  max_attempts: Math.min(Number(i.max_attempts ?? 5), 8),\n  attempt: 1,\n}}];\n"
+      },
+      "position": [
+        200,
+        300
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "credentials": {
+        "postgres": {
+          "name": "B24HUB Postgres"
+        }
+      },
+      "id": "5b000275-00f9-58a9-bc34-6f5d2641f541",
+      "name": "Log attempt",
+      "parameters": {
+        "operation": "executeQuery",
+        "options": {
+          "queryReplacement": "={{ [$json.method, $json.attempt, $json.http_status, $json.ok, $json.retryable, $json.error_code, $json.error_description, $json.duration_ms, $json.operating, $json.operating_reset_at, $json.caller_workflow, $json.caller_execution_id, new Date($json.sent_at).toISOString()] }}"
+        },
+        "query": "INSERT INTO b24_call_log\n  (method, attempt, http_status, ok, retryable, error_code, error_description, duration_ms, operating, operating_reset_at, caller, execution_id, sent_at)\nVALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::numeric, $10::timestamptz, $11, $12, $13::timestamptz)"
+      },
+      "position": [
+        1840,
+        180
+      ],
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6
+    },
+    {
+      "id": "a5e8094d-b5a4-56d7-9c62-7540a7225eea",
+      "name": "Next attempt",
+      "parameters": {
+        "jsCode": "const s = $json;\nreturn [{ json: { method: s.method, params: s.params, caller_workflow: s.caller_workflow, caller_execution_id: s.caller_execution_id,\n                  max_attempts: s.max_attempts, attempt: s.attempt + 1 } }];\n"
+      },
+      "position": [
+        2260,
+        320
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "id": "28d0794d-ab0e-5696-b94f-94691f757661",
+      "name": "Parse response",
+      "parameters": {
+        "jsCode": "// Bitrix24 may report errors with HTTP 200, so the body is always inspected.\nconst s = $('Stamp').first().json;\nconst status = Number($json.statusCode ?? 0);\nlet body = $json.body;\nif (typeof body === 'string') { try { body = JSON.parse(body); } catch { body = { error: 'NON_JSON_RESPONSE', error_description: body.slice(0, 300) }; } }\nbody = body ?? {};\nconst RETRYABLE_CODES = ['QUERY_LIMIT_EXCEEDED', 'OPERATION_TIME_LIMIT', 'INTERNAL_SERVER_ERROR'];\nconst errorCode = body.error ? String(body.error) : (status >= 400 ? `HTTP_${status}` : null);\nconst ok = !errorCode;\nconst retryable = !ok && (RETRYABLE_CODES.includes(errorCode) || [429, 500, 502, 503, 504].includes(status));\nconst t = body.time ?? {};\n// Exponential backoff with jitter; OPERATION_TIME_LIMIT waits until the oldest minute bucket resets.\nlet backoff = Math.min(30000, 1000 * 2 ** (s.attempt - 1)) + Math.floor(Math.random() * 250);\nif (errorCode === 'OPERATION_TIME_LIMIT' && t.operating_reset_at) {\n  backoff = Math.max(backoff, Math.min(60000, t.operating_reset_at * 1000 - Date.now()));\n}\nreturn [{ json: {\n  ...s,\n  ok, retryable, http_status: status,\n  error_code: errorCode,\n  error_description: ok ? null : String(body.error_description ?? '').slice(0, 1000),\n  result: ok ? body.result : null,\n  total: body.total ?? null,\n  next: body.next ?? null,\n  result_error: body.result_error ?? null,\n  operating: t.operating ?? null,\n  operating_reset_at: t.operating_reset_at ? new Date(t.operating_reset_at * 1000).toISOString() : null,\n  duration_ms: Date.now() - s.sent_at,\n  backoff_ms: backoff,\n  will_retry: retryable && s.attempt < s.max_attempts,\n}}];\n"
+      },
+      "position": [
+        1620,
+        300
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "id": "36261671-9166-5d85-a160-34b430728c75",
+      "name": "Retry?",
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "ccda4683-8125-527c-b433-c0bbf26c3eb3",
+              "leftValue": "={{ $json.will_retry }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        1840,
+        400
+      ],
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2
+    },
+    {
+      "id": "79b3f551-03d1-5807-8c32-140e86bee4d3",
+      "name": "Return",
+      "parameters": {
+        "jsCode": "const s = $json;\nreturn [{ json: {\n  ok: s.ok, method: s.method, result: s.result, total: s.total, next: s.next, result_error: s.result_error,\n  error_code: s.error_code, error_description: s.error_description, http_status: s.http_status,\n  attempts: s.attempt, operating: s.operating,\n}}];\n"
+      },
+      "position": [
+        2060,
+        500
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "id": "2514ea1b-5b19-52a5-a27c-0cd45b6235e0",
+      "name": "Stamp",
+      "parameters": {
+        "jsCode": "// Wait-node wake-up can be a few ms early; never send before the reserved slot.\nconst s = $json;\nwhile (Date.now() < s.slot_at_ms) { /* spin <= few ms */ }\nreturn [{ json: { ...s, sent_at: Date.now() } }];\n"
+      },
+      "position": [
+        1220,
+        300
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "id": "6e5fe373-0449-5b2a-9348-4e21f2d3f803",
+      "name": "Throttle?",
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "42de9f0f-fecd-5cd2-a4bf-c6ed8cee7260",
+              "leftValue": "={{ $json.slot_at_ms - Date.now() > 5 }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        820,
+        300
+      ],
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2
+    },
+    {
+      "id": "2fdb86ca-13d9-5d03-a562-58d70d30ec6a",
+      "name": "Unwrap",
+      "parameters": {
+        "jsCode": "const s = $json.state;\nif (!s.base_url) throw new Error('b24_auth is not configured: run scripts/seed_config.sh');\nreturn [{ json: s }];\n"
+      },
+      "position": [
+        620,
+        300
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "id": "590e3286-6a88-5020-8581-0cb475022622",
+      "name": "Wait for slot",
+      "parameters": {
+        "amount": "={{ Math.max(0, $json.slot_at_ms - Date.now()) / 1000 }}"
+      },
+      "position": [
+        1020,
+        220
+      ],
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "webhookId": "64a35f82-0179-5269-8f44-59fc8fb0a948"
+    },
+    {
+      "id": "159e6d39-9294-5b6f-bb50-371a4cd35d1b",
+      "name": "When called",
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "position": [
+        0,
+        300
+      ],
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1
+    }
+  ],
+  "settings": {
+    "errorWorkflow": "@name:[B24HUB] 99 error handler",
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "none"
+  }
+}
