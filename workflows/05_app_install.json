@@ -1,0 +1,422 @@
+{
+  "active": true,
+  "connections": {
+    "Check install": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Installed?",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Expected portal": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Precheck",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Failure page": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Respond failed",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Install batch": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Check install",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Install request": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Parse",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Installed?": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Save app",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Failure page",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Parse": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Expected portal",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Precheck": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Precheck ok?",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Precheck ok?": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Install batch",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Failure page",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Save app": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Success page",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Success page": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Respond installed",
+            "type": "main"
+          }
+        ]
+      ]
+    }
+  },
+  "name": "[B24HUB] 05 app install",
+  "nodes": [
+    {
+      "id": "f2bb0c67-7d45-58c5-9454-02e9a2c930a6",
+      "name": "Check install",
+      "parameters": {
+        "jsCode": "// The batch authenticates the request: an invalid AUTH_ID fails every command.\nconst p = $('Precheck').first().json;\nconst body = $json.body ?? {};\nconst res = body.result?.result ?? {}, errs = body.result?.result_error ?? {};\nconst err = (k) => errs[k] ? `${errs[k].error ?? ''} ${errs[k].error_description ?? ''}`.trim() : null;\nconst problems = [];\nif (body.error) problems.push(`auth: ${body.error} ${body.error_description ?? ''}`);\nif (!res.info) problems.push(`app.info: ${err('info') ?? 'no result'}`);\nif (res.profile && !res.profile.ADMIN) problems.push('the installing user is not a portal administrator');\nconst ignorable = (k) => !errs[k] || /already|ALREADY/i.test(err(k));\nfor (const k of ['ev_deal', 'ev_uninstall', 'robot_add']) if (!ignorable(k)) problems.push(`${k}: ${err(k)}`);\nfor (const k of ['robot_update', 'tab_bind']) if (errs[k]) problems.push(`${k}: ${err(k)}`);\nconst bound = (res.events ?? []).map((e) => `${e.event}->${e.handler}`);\nfor (const ev of ['ONCRMDEALUPDATE', 'ONAPPUNINSTALL']) if (!bound.some((x) => x.startsWith(ev))) problems.push(`event ${ev} not bound`);\nconst report = {\n  app: res.info ? { id: res.info.ID, code: res.info.CODE, version: res.info.VERSION, scope: res.info.SCOPE } : null,\n  installer: res.profile ? { id: res.profile.ID, admin: res.profile.ADMIN } : null,\n  events: bound, robots: res.robots ?? [], placement: errs.tab_bind ? null : 'CRM_DEAL_DETAIL_TAB',\n  ignored: Object.fromEntries(['ev_deal', 'ev_uninstall', 'robot_add', 'tab_unbind'].filter((k) => errs[k]).map((k) => [k, err(k)])),\n};\nreturn [{ json: { ...p, ok: problems.length === 0, problems, report } }];\n"
+      },
+      "position": [
+        1320,
+        200
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "credentials": {
+        "postgres": {
+          "name": "B24HUB Postgres"
+        }
+      },
+      "id": "c76d2f39-c21c-53d5-a6b2-9db2387ef1d1",
+      "name": "Expected portal",
+      "parameters": {
+        "operation": "executeQuery",
+        "options": {
+          "queryReplacement": "={{ [JSON.stringify($json)] }}"
+        },
+        "query": "SELECT $1::jsonb || jsonb_build_object('portal_url', (SELECT value FROM settings WHERE key = 'portal_url')) AS r"
+      },
+      "position": [
+        440,
+        300
+      ],
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6
+    },
+    {
+      "id": "205708f0-4b33-5c4d-b36a-28f9f7974489",
+      "name": "Failure page",
+      "parameters": {
+        "jsCode": "const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\"/g, '&quot;');\n\n// No BX24.installFinish(): the portal keeps the app \"not installed\" and shows this page again.\nconst p = $json;\nconst html = `<!doctype html><html><head><meta charset=\"utf-8\"><title>b24-lead-hub</title><style>body{font:14px/1.45 -apple-system,Segoe UI,Roboto,sans-serif;color:#1f2933;margin:16px;background:#fff}h1{font-size:18px;margin:0 0 4px}h2{font-size:15px;margin:20px 0 8px}.muted{color:#6b7785}table{border-collapse:collapse;width:100%}td,th{border-bottom:1px solid #e6e9ee;padding:6px 8px;text-align:left;vertical-align:top}th{font-weight:600;color:#52606d;font-size:12px;text-transform:uppercase;letter-spacing:.03em}.b{display:inline-block;padding:2px 8px;border-radius:10px;font-size:12px;font-weight:600}.ok{background:#e3f6ea;color:#16794c}.bad{background:#fde8e8;color:#b42318}.wait{background:#fff4e0;color:#a15c00}.kpi{display:inline-block;margin:0 24px 8px 0}.kpi b{display:block;font-size:22px}code{font-size:12px}</style></head><body>\n<h1>Установка не завершена</h1><ul>${(p.problems ?? []).map((x) => `<li>${esc(x)}</li>`).join('')}</ul>\n<p class=\"muted\">Ничего не сохранено. Исправьте причину и откройте приложение ещё раз.</p></body></html>`;\nreturn [{ json: { html, problems: p.problems } }];\n"
+      },
+      "position": [
+        1760,
+        400
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "id": "a4d04e2b-a43e-56c4-84f4-8238ef4e7e93",
+      "maxTries": 3,
+      "name": "Install batch",
+      "parameters": {
+        "jsonBody": "={{ JSON.stringify({ auth: $json.auth_id, halt: 0, cmd: $json.cmd }) }}",
+        "method": "POST",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          },
+          "timeout": 20000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "url": "={{ $json.client_endpoint + 'batch.json' }}"
+      },
+      "position": [
+        1100,
+        200
+      ],
+      "retryOnFail": true,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "waitBetweenTries": 1000
+    },
+    {
+      "id": "435a0e8e-c858-5f27-8a51-acd9196a3ab7",
+      "name": "Install request",
+      "parameters": {
+        "httpMethod": "POST",
+        "options": {},
+        "path": "b24hub/app/install",
+        "responseMode": "responseNode"
+      },
+      "position": [
+        0,
+        300
+      ],
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "webhookId": "f169a189-ad24-5986-9df9-3e3174bdd9ad"
+    },
+    {
+      "id": "0f6a8699-fec4-595b-ad24-0205c688a206",
+      "name": "Installed?",
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "4b2608e3-e99a-57f1-a410-bc1ba920e1eb",
+              "leftValue": "={{ $json.ok }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        1540,
+        200
+      ],
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2
+    },
+    {
+      "id": "fe465605-317c-5b85-8c29-97605c44f65a",
+      "name": "Parse",
+      "parameters": {
+        "jsCode": "// Bitrix24 opens the install path with POST: AUTH_ID, AUTH_EXPIRES, REFRESH_ID, APPLICATION_TOKEN,\n// member_id, SERVER_ENDPOINT, status (body) and DOMAIN, PROTOCOL, LANG, APP_SID (query).\nconst b = $json.body ?? {}, q = $json.query ?? {};\nconst v = (k) => b[k] ?? q[k] ?? null;\nreturn [{ json: { auth_id: v('AUTH_ID'), refresh_id: v('REFRESH_ID'), expires: Number(v('AUTH_EXPIRES') ?? 3600),\n                  application_token: v('APPLICATION_TOKEN'), member_id: v('member_id'), domain: String(v('DOMAIN') ?? '').toLowerCase(),\n                  server_endpoint: v('SERVER_ENDPOINT'), scope: v('APPLICATION_SCOPE') } }];\n"
+      },
+      "position": [
+        220,
+        300
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "id": "3cfa8247-4b10-59b0-9aa7-bad3faeb7d25",
+      "name": "Precheck",
+      "parameters": {
+        "jsCode": "function qs(obj, prefix) {\n  return Object.entries(obj).filter(([, v]) => v !== undefined && v !== null).map(([k, v]) => {\n    const key = prefix ? `${prefix}[${k}]` : k;\n    if (v && typeof v === 'object') return qs(v, key);\n    return `${key}=${encodeURIComponent(String(v))}`;\n  }).filter(Boolean).join('&');\n}\n\n// Only our portal may install; the AUTH_ID itself is verified by the batch below (it must work on that portal).\nconst r = $json.r;\nconst portalHost = String(r.portal_url ?? '').replace(/^https?:\\/\\//, '').replace(/\\/.*$/, '').toLowerCase();\nconst problems = [];\nif (!r.auth_id || !r.refresh_id || !r.application_token || !r.member_id) problems.push('missing AUTH_ID / REFRESH_ID / APPLICATION_TOKEN / member_id');\nif (!portalHost || r.domain !== portalHost) problems.push(`portal ${r.domain || '?'} is not the configured portal`);\nconst URL = {\"install\": \"https://n8n.144-31-229-139.sslip.io/webhook/b24hub/app/install\", \"handler\": \"https://n8n.144-31-229-139.sslip.io/webhook/b24hub/app\", \"robot\": \"https://n8n.144-31-229-139.sslip.io/webhook/b24hub/app/robot\", \"tab\": \"https://n8n.144-31-229-139.sslip.io/webhook/b24hub/app/tab\", \"app_events\": \"https://n8n.144-31-229-139.sslip.io/webhook/b24hub/app/events\", \"deal_events\": \"https://n8n.144-31-229-139.sslip.io/webhook/b24hub/b24-events\"};\nconst ROBOT = {\"CODE\": \"b24hub_inn_check\", \"HANDLER\": \"https://n8n.144-31-229-139.sslip.io/webhook/b24hub/app/robot\", \"USE_SUBSCRIPTION\": \"Y\", \"NAME\": {\"ru\": \"Проверить контрагента по ИНН\", \"en\": \"Check counterparty by INN\"}, \"DESCRIPTION\": {\"ru\": \"DaData: наименование, статус, КПП, ОГРН, адрес по ИНН (b24-lead-hub)\"}, \"PROPERTIES\": {\"INN\": {\"Name\": {\"ru\": \"ИНН\", \"en\": \"INN\"}, \"Type\": \"string\", \"Required\": \"Y\"}}, \"RETURN_PROPERTIES\": {\"CHECK_RESULT\": {\"Name\": {\"ru\": \"Результат проверки\"}, \"Type\": \"string\"}, \"COMPANY_NAME\": {\"Name\": {\"ru\": \"Наименование\"}, \"Type\": \"string\"}, \"STATUS\": {\"Name\": {\"ru\": \"Статус (ЕГРЮЛ)\"}, \"Type\": \"string\"}, \"IS_ACTIVE\": {\"Name\": {\"ru\": \"Действующая\"}, \"Type\": \"bool\"}, \"KPP\": {\"Name\": {\"ru\": \"КПП\"}, \"Type\": \"string\"}, \"OGRN\": {\"Name\": {\"ru\": \"ОГРН\"}, \"Type\": \"string\"}, \"ADDRESS\": {\"Name\": {\"ru\": \"Адрес\"}, \"Type\": \"text\"}}, \"DOCUMENT_TYPE\": [\"crm\", \"CCrmDocumentDeal\", \"DEAL\"], \"FILTER\": {\"INCLUDE\": [[\"crm\", \"CCrmDocumentDeal\"]]}};\nconst { CODE, ...robotFields } = ROBOT;\nconst cmd = {\n  info: 'app.info',\n  profile: 'profile',\n  ev_deal: 'event.bind?' + qs({ event: 'ONCRMDEALUPDATE', handler: URL.deal_events }),\n  ev_uninstall: 'event.bind?' + qs({ event: 'ONAPPUNINSTALL', handler: URL.app_events }),\n  robot_add: 'bizproc.robot.add?' + qs(ROBOT),\n  robot_update: 'bizproc.robot.update?' + qs({ CODE, FIELDS: robotFields }),\n  tab_unbind: 'placement.unbind?' + qs({ PLACEMENT: 'CRM_DEAL_DETAIL_TAB', HANDLER: URL.tab }),\n  tab_bind: 'placement.bind?' + qs({ PLACEMENT: 'CRM_DEAL_DETAIL_TAB', HANDLER: URL.tab, TITLE: 'Интеграция',\n                                     LANG_ALL: { ru: { TITLE: 'Интеграция' }, en: { TITLE: 'Integration' } } }),\n  events: 'event.get',\n  robots: 'bizproc.robot.list',\n};\nreturn [{ json: { ...r, problems, cmd, client_endpoint: `https://${r.domain}/rest/` } }];\n"
+      },
+      "position": [
+        660,
+        300
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "id": "f74bdb15-8151-54d1-8531-ebd54310b84c",
+      "name": "Precheck ok?",
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "cc438873-73ec-56f1-ba4f-e6da79833d6b",
+              "leftValue": "={{ $json.problems.length === 0 }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        880,
+        300
+      ],
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2
+    },
+    {
+      "id": "ba3c584e-611f-55b3-a6e5-f10304d85c24",
+      "name": "Respond failed",
+      "parameters": {
+        "options": {
+          "responseCode": 403,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "text/html; charset=utf-8"
+              }
+            ]
+          }
+        },
+        "respondWith": "text",
+        "responseBody": "={{ $json.html }}"
+      },
+      "position": [
+        1980,
+        400
+      ],
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4
+    },
+    {
+      "id": "d564a54b-3d4b-5773-97ee-4f8c658be524",
+      "name": "Respond installed",
+      "parameters": {
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "text/html; charset=utf-8"
+              }
+            ]
+          }
+        },
+        "respondWith": "text",
+        "responseBody": "={{ $json.html }}"
+      },
+      "position": [
+        2200,
+        120
+      ],
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4
+    },
+    {
+      "credentials": {
+        "postgres": {
+          "name": "B24HUB Postgres"
+        }
+      },
+      "id": "2398b9d2-ce11-50f2-a8c4-f58556402ffc",
+      "name": "Save app",
+      "parameters": {
+        "operation": "executeQuery",
+        "options": {
+          "queryReplacement": "={{ [$json.member_id, $json.domain, $json.client_endpoint, $json.server_endpoint ?? null, $json.auth_id, $json.refresh_id, $json.expires, $json.application_token, $json.scope ?? null, JSON.stringify($json.report)] }}"
+        },
+        "query": "INSERT INTO b24_app (member_id, domain, client_endpoint, server_endpoint, access_token, refresh_token,\n                     expires_at, application_token, scope, status, installed_at, install_report, updated_at)\nVALUES ($1, $2, $3, $4, $5, $6, now() + make_interval(secs => $7::int), $8, $9, 'installed', now(), $10::jsonb, now())\nON CONFLICT (member_id) DO UPDATE SET\n  domain = EXCLUDED.domain, client_endpoint = EXCLUDED.client_endpoint, server_endpoint = EXCLUDED.server_endpoint,\n  access_token = EXCLUDED.access_token, refresh_token = EXCLUDED.refresh_token, expires_at = EXCLUDED.expires_at,\n  application_token = EXCLUDED.application_token, scope = EXCLUDED.scope, status = 'installed',\n  installed_at = now(), install_report = EXCLUDED.install_report, refresh_lock_until = NULL, updated_at = now()\nRETURNING member_id"
+      },
+      "position": [
+        1760,
+        120
+      ],
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6
+    },
+    {
+      "id": "b82a2664-987f-5fbb-ae26-dfd3935a07cd",
+      "name": "Success page",
+      "parameters": {
+        "jsCode": "const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\"/g, '&quot;');\n\nconst p = $('Check install').first().json, r = p.report;\nconst html = `<!doctype html><html><head><meta charset=\"utf-8\"><title>b24-lead-hub</title><style>body{font:14px/1.45 -apple-system,Segoe UI,Roboto,sans-serif;color:#1f2933;margin:16px;background:#fff}h1{font-size:18px;margin:0 0 4px}h2{font-size:15px;margin:20px 0 8px}.muted{color:#6b7785}table{border-collapse:collapse;width:100%}td,th{border-bottom:1px solid #e6e9ee;padding:6px 8px;text-align:left;vertical-align:top}th{font-weight:600;color:#52606d;font-size:12px;text-transform:uppercase;letter-spacing:.03em}.b{display:inline-block;padding:2px 8px;border-radius:10px;font-size:12px;font-weight:600}.ok{background:#e3f6ea;color:#16794c}.bad{background:#fde8e8;color:#b42318}.wait{background:#fff4e0;color:#a15c00}.kpi{display:inline-block;margin:0 24px 8px 0}.kpi b{display:block;font-size:22px}code{font-size:12px}</style></head><body>\n<h1>b24-lead-hub установлен</h1><p class=\"muted\">Портал ${esc(p.domain)}. Установку подтвердил администратор #${esc(r.installer?.id)}.</p>\n<table><tr><th>Что</th><th>Результат</th></tr>\n<tr><td>События</td><td>${r.events.map(esc).join('<br>')}</td></tr>\n<tr><td>Робот</td><td>Проверить контрагента по ИНН (<code>b24hub_inn_check</code>)</td></tr>\n<tr><td>Вкладка в сделке</td><td>«Интеграция» (CRM_DEAL_DETAIL_TAB)</td></tr>\n<tr><td>OAuth</td><td>токены сохранены на сервере интеграции</td></tr></table>\n<script src=\"https://api.bitrix24.com/api/v1/\"></script>\n<script>BX24.init(function () { BX24.installFinish(); });</script></body></html>`;\nreturn [{ json: { html } }];\n"
+      },
+      "position": [
+        1980,
+        120
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    }
+  ],
+  "settings": {
+    "errorWorkflow": "@name:[B24HUB] 99 error handler",
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all"
+  }
+}
