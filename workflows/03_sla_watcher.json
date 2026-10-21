@@ -1,0 +1,636 @@
+{
+  "active": true,
+  "connections": {
+    "Anything to send?": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Telegram digest",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Breaker gate": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Warn now?",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Breaker text": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Telegram breaker",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Build escalations": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "b24: escalate",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Claim": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Build escalations",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Collect": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Mark breached",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Digest": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Anything to send?",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Every minute": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Scan",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Log run": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Mode",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Mark breached": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Digest",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Mode": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Claim",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Breaker gate",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Plan": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Worth logging?",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Scan": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Plan",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Warn now?": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Breaker text",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Worth logging?": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Log run",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "b24: escalate": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Collect",
+            "type": "main"
+          }
+        ]
+      ]
+    }
+  },
+  "name": "[B24HUB] 03 sla watcher",
+  "nodes": [
+    {
+      "id": "0133e5ca-264f-5298-abc6-e796bc874d7e",
+      "name": "Anything to send?",
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "6c44d529-2b6f-5c3c-b08f-3946064ab5ed",
+              "leftValue": "={{ $json.send }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        2640,
+        120
+      ],
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2
+    },
+    {
+      "credentials": {
+        "postgres": {
+          "name": "B24HUB Postgres"
+        }
+      },
+      "id": "7e2aaf57-3de7-50de-9f29-f43a3e221e15",
+      "name": "Breaker gate",
+      "parameters": {
+        "operation": "executeQuery",
+        "options": {},
+        "query": "-- At most one breaker warning per hour.\nUPDATE settings SET value = now()::text, updated_at = now()\n WHERE key = 'sla_watch_last_breaker_alert_at'\n   AND (value = '' OR value::timestamptz < now() - interval '1 hour')\nRETURNING value AS sent_at"
+      },
+      "position": [
+        1320,
+        340
+      ],
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6
+    },
+    {
+      "id": "e0acf4fb-6518-52be-bff4-9bf7fdd1ae93",
+      "name": "Breaker text",
+      "parameters": {
+        "jsCode": "const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\n\nconst p = $('Plan').first().json;\nreturn [{ json: { chat_id: p.cfg.chat_id, text: `🚨 <b>SLA watcher: ${p.due_count} просроченных SLA одновременно</b> (порог ${p.cfg.breaker}).\\nИндивидуальные эскалации приостановлены, чтобы не засыпать менеджеров. Проверьте очередь и время на сервере; затем поднимите sla_escalation_breaker или закройте SLA.` } }];\n"
+      },
+      "position": [
+        1760,
+        340
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "id": "e6fc3ffb-e044-566f-9edb-8f7f0762f33e",
+      "name": "Build escalations",
+      "parameters": {
+        "jsCode": "const plan = $('Plan').first().json;\nconst claimed = new Set($input.all().map((i) => Number(i.json.inbox_id)).filter(Boolean));\nconst cfg = plan.cfg;\nconst out = [];\nfor (const it of plan.items.filter((x) => claimed.has(Number(x.inbox_id)))) {\n  const link = `[URL=${cfg.portal_url}/crm/deal/details/${it.deal_id}/]сделке #${it.deal_id}[/URL]`;\n  const text = `⏰ Просрочен первый ответ по ${link} (${it.client ?? 'клиент'}): ${it.overdue_min} мин сверх SLA.`;\n  const cmd = {\n    manager: 'im.notify.system.add?USER_ID=' + it.manager_id + '&MESSAGE=' + encodeURIComponent(text + ' Ответьте клиенту.'),\n    sla: `crm.item.update?entityTypeId=${cfg.sla_type}&id=${it.sla_item_id}&fields[stageId]=${encodeURIComponent(cfg.stage_fail)}`,\n  };\n  if (cfg.rop_user_id && String(cfg.rop_user_id) !== String(it.manager_id)) {\n    cmd.rop = 'im.notify.system.add?USER_ID=' + cfg.rop_user_id + '&MESSAGE=' + encodeURIComponent(text + ` Ответственный: ${it.manager_id}.`);\n  }\n  out.push({ json: { method: 'batch', params: { halt: 0, cmd }, caller_workflow: $workflow.name, caller_execution_id: $execution.id, item: it } });\n}\nreturn out;\n"
+      },
+      "position": [
+        1540,
+        120
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "credentials": {
+        "postgres": {
+          "name": "B24HUB Postgres"
+        }
+      },
+      "id": "ed45c9d9-7f34-5a8f-8f6f-c4ef8f8b9120",
+      "name": "Claim",
+      "parameters": {
+        "operation": "executeQuery",
+        "options": {
+          "queryReplacement": "={{ [ '{' + $('Plan').first().json.items.map(i => i.inbox_id).join(',') + '}' ] }}"
+        },
+        "query": "-- Overlapping runs cannot escalate the same SLA twice: only rows still unescalated are claimed.\nUPDATE assignments SET escalated_at = now()\n WHERE inbox_id = ANY ($1::bigint[]) AND escalated_at IS NULL AND sla_status = 'open'\nRETURNING inbox_id"
+      },
+      "position": [
+        1320,
+        120
+      ],
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6
+    },
+    {
+      "id": "53b9e330-4568-58c1-abb5-e6c599cb08dd",
+      "name": "Collect",
+      "parameters": {
+        "jsCode": "const sent = $('Build escalations').all();\nconst res = $input.all();\nconst ok = [], failed = [];\nres.forEach((r, i) => {\n  const it = sent[i].json.item;\n  const errs = Object.values(r.json.result?.result_error ?? {}).filter((v) => v && !(Array.isArray(v) && !v.length));\n  (r.json.ok && !errs.length ? ok : failed).push({ ...it, error: r.json.error_code ?? (errs[0] ? JSON.stringify(errs[0]).slice(0, 200) : null) });\n});\nreturn [{ json: { ok, failed } }];\n"
+      },
+      "position": [
+        1980,
+        120
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "id": "cccec38b-92ef-50ec-9ea7-eb4bbd86b179",
+      "name": "Digest",
+      "parameters": {
+        "jsCode": "const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\n\n// One Telegram message per run for the head of sales, not one per deal.\nconst plan = $('Plan').first().json, c = $('Collect').first().json, cfg = plan.cfg;\nconst lines = c.ok.map((i) => `• <a href=\"${esc(cfg.portal_url)}/crm/deal/details/${i.deal_id}/\">#${i.deal_id}</a> ${esc(i.client ?? '')}: менеджер ${i.manager_id}, +${i.overdue_min} мин`);\nconst rest = plan.due_count - c.ok.length - c.failed.length;\nconst text = [`⏰ <b>SLA первого ответа нарушен: ${c.ok.length}</b>`, ...lines,\n  ...(c.failed.length ? [`⚠️ не удалось эскалировать: ${c.failed.length} (повтор в следующем запуске)`] : []),\n  ...(rest > 0 ? [`… ещё ${rest} в очереди (лимит ${cfg.lim} за запуск)`] : [])].join('\\n');\nreturn [{ json: { chat_id: cfg.chat_id, text, send: c.ok.length + c.failed.length > 0 } }];\n"
+      },
+      "position": [
+        2420,
+        120
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "id": "9bbbfbd5-e08f-57dc-8006-ce772b07f8b9",
+      "name": "Every minute",
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 1
+            }
+          ]
+        }
+      },
+      "position": [
+        0,
+        300
+      ],
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2
+    },
+    {
+      "credentials": {
+        "postgres": {
+          "name": "B24HUB Postgres"
+        }
+      },
+      "id": "01f9ca71-0e54-514f-8270-afdb7c874935",
+      "name": "Log run",
+      "parameters": {
+        "operation": "executeQuery",
+        "options": {
+          "queryReplacement": "={{ [$json.mode, $json.due_count, $json.planned, JSON.stringify({ dry_run: $json.cfg.dry_run, limit: $json.cfg.lim, breaker: $json.cfg.breaker, deals: $json.items.map(i => i.deal_id) })] }}"
+        },
+        "query": "INSERT INTO sla_watch_runs (mode, due_count, planned, details)\nVALUES ($1, $2, $3, $4::jsonb) RETURNING id"
+      },
+      "position": [
+        880,
+        220
+      ],
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6
+    },
+    {
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "name": "B24HUB Postgres"
+        }
+      },
+      "id": "52e7d1e3-98ce-5052-805d-ef9d52acd02c",
+      "name": "Mark breached",
+      "parameters": {
+        "operation": "executeQuery",
+        "options": {
+          "queryReplacement": "={{ [ '{' + $json.ok.map(i => i.inbox_id).join(',') + '}', '{' + $json.failed.map(i => i.inbox_id).join(',') + '}', $execution.id ] }}"
+        },
+        "query": "WITH b AS (\n  UPDATE assignments SET sla_status = 'breached'\n   WHERE inbox_id = ANY ($1::bigint[]) RETURNING inbox_id, deal_id, manager_id\n), r AS (  -- failed escalations are released for the next run\n  UPDATE assignments SET escalated_at = NULL WHERE inbox_id = ANY ($2::bigint[]) RETURNING inbox_id\n)\nINSERT INTO lead_events (inbox_id, deal_id, step, detail, execution_id)\nSELECT inbox_id, deal_id, 'sla_escalated', jsonb_build_object('manager_id', manager_id, 'notified', 'manager+rop (im) + telegram digest'), $3 FROM b\nRETURNING inbox_id"
+      },
+      "position": [
+        2200,
+        120
+      ],
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6
+    },
+    {
+      "id": "f51a3a27-c5f3-5664-9a2f-0c370029d21e",
+      "name": "Mode",
+      "parameters": {
+        "options": {
+          "fallbackOutput": "none"
+        },
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "d84916a5-6c5d-5ba5-b2ec-71d8121e6d30",
+                    "leftValue": "={{ $('Plan').first().json.mode }}",
+                    "operator": {
+                      "operation": "equals",
+                      "type": "string"
+                    },
+                    "rightValue": "escalate"
+                  }
+                ],
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                }
+              },
+              "outputKey": "escalate",
+              "renameOutput": true
+            },
+            {
+              "conditions": {
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "id": "0c420db3-501e-54a6-bfbf-b86fad6fd936",
+                    "leftValue": "={{ $('Plan').first().json.mode }}",
+                    "operator": {
+                      "operation": "equals",
+                      "type": "string"
+                    },
+                    "rightValue": "breaker"
+                  }
+                ],
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                }
+              },
+              "outputKey": "breaker",
+              "renameOutput": true
+            }
+          ]
+        }
+      },
+      "position": [
+        1100,
+        220
+      ],
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2
+    },
+    {
+      "id": "4c2e2514-0959-5403-8100-642bf92fb203",
+      "name": "Plan",
+      "parameters": {
+        "jsCode": "// idle: nothing overdue. dry_run: count and log, send nothing. breaker: too many at once = an incident\n// (e.g. a backlog or a clock problem), one rate-limited warning instead of N escalations.\nconst { cfg, due_count, items } = $json;\nconst mode = due_count === 0 ? 'idle' : cfg.dry_run ? 'dry_run' : due_count > cfg.breaker ? 'breaker' : 'escalate';\nreturn [{ json: { mode, cfg, due_count, items, planned: mode === 'idle' || mode === 'breaker' ? 0 : items.length } }];\n"
+      },
+      "position": [
+        440,
+        300
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "credentials": {
+        "postgres": {
+          "name": "B24HUB Postgres"
+        }
+      },
+      "id": "d5a9393b-72b1-5692-aba4-d224302767d6",
+      "name": "Scan",
+      "parameters": {
+        "operation": "executeQuery",
+        "options": {},
+        "query": "WITH cfg AS (\n  SELECT coalesce((SELECT value FROM settings WHERE key = 'sla_watch_dry_run'), 'true') <> 'false' AS dry_run,\n         coalesce((SELECT value::int FROM settings WHERE key = 'sla_escalation_limit'), 10)   AS lim,\n         coalesce((SELECT value::int FROM settings WHERE key = 'sla_escalation_breaker'), 50) AS breaker,\n         (SELECT value FROM settings WHERE key = 'rop_user_id')        AS rop_user_id,\n         (SELECT value FROM settings WHERE key = 'sla_stage_fail')     AS stage_fail,\n         (SELECT value FROM settings WHERE key = 'sla_entity_type_id') AS sla_type,\n         (SELECT value FROM settings WHERE key = 'alert_chat_id')      AS chat_id,\n         (SELECT value FROM settings WHERE key = 'portal_url')         AS portal_url\n), due AS (\n  SELECT a.inbox_id, a.deal_id, a.sla_item_id, a.manager_id, a.sla_due,\n         round(extract(epoch FROM now() - a.sla_due) / 60)::int AS overdue_min,\n         i.payload->'contact'->>'name' AS client\n    FROM assignments a JOIN inbox i ON i.id = a.inbox_id\n   WHERE a.sla_status = 'open' AND a.sla_due < now() AND a.escalated_at IS NULL AND a.deal_id IS NOT NULL\n)\nSELECT row_to_json(cfg) AS cfg,\n       (SELECT count(*) FROM due)::int AS due_count,\n       (SELECT coalesce(json_agg(d ORDER BY d.sla_due), '[]')\n          FROM (SELECT * FROM due ORDER BY sla_due LIMIT (SELECT lim FROM cfg)) d) AS items\n  FROM cfg"
+      },
+      "position": [
+        220,
+        300
+      ],
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6
+    },
+    {
+      "credentials": {
+        "telegramApi": {
+          "name": "B24HUB Telegram"
+        }
+      },
+      "id": "c72c4cc5-8b6d-5776-b39d-1f42385f057f",
+      "maxTries": 4,
+      "name": "Telegram breaker",
+      "parameters": {
+        "additionalFields": {
+          "appendAttribution": false,
+          "disable_web_page_preview": true,
+          "parse_mode": "HTML"
+        },
+        "chatId": "={{ $json.chat_id }}",
+        "text": "={{ $json.text }}"
+      },
+      "position": [
+        1980,
+        340
+      ],
+      "retryOnFail": true,
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "waitBetweenTries": 3000,
+      "webhookId": "cf86b12e-75bf-4f19-b3b4-462162efe520"
+    },
+    {
+      "credentials": {
+        "telegramApi": {
+          "name": "B24HUB Telegram"
+        }
+      },
+      "id": "1c8ac7e2-23a4-5f47-9868-8cf7e7bd79ef",
+      "maxTries": 4,
+      "name": "Telegram digest",
+      "parameters": {
+        "additionalFields": {
+          "appendAttribution": false,
+          "disable_web_page_preview": true,
+          "parse_mode": "HTML"
+        },
+        "chatId": "={{ $json.chat_id }}",
+        "text": "={{ $json.text }}"
+      },
+      "position": [
+        2860,
+        120
+      ],
+      "retryOnFail": true,
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "waitBetweenTries": 3000,
+      "webhookId": "bdf46b52-cfcd-4280-b9b4-9c46811ae5f3"
+    },
+    {
+      "id": "dd83c960-4c76-5bc2-a821-54defdf6ef87",
+      "name": "Warn now?",
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "143b8993-c908-5a37-a37d-445c56e8bd83",
+              "leftValue": "={{ $json.sent_at !== undefined }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        1540,
+        340
+      ],
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2
+    },
+    {
+      "id": "1ee9cd28-2f22-5d0f-9859-dad1df028026",
+      "name": "Worth logging?",
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "aad85d34-754c-5f63-8e45-dd201e4893f2",
+              "leftValue": "={{ $json.mode !== 'idle' || $json.cfg.dry_run }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        660,
+        300
+      ],
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2
+    },
+    {
+      "id": "486d1fa6-5a9b-56e2-a050-460501d73856",
+      "name": "b24: escalate",
+      "parameters": {
+        "mode": "each",
+        "options": {
+          "waitForSubWorkflow": true
+        },
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "@name:[B24HUB] lib b24_call"
+        }
+      },
+      "position": [
+        1760,
+        120
+      ],
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1
+    }
+  ],
+  "settings": {
+    "errorWorkflow": "@name:[B24HUB] 99 error handler",
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "none"
+  }
+}
