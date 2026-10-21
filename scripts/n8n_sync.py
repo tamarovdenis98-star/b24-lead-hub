@@ -45,6 +45,12 @@ CREDENTIALS = {
     "B24HUB DaData": ("httpHeaderAuth", lambda e: {
         "name": "Authorization", "value": "Token " + e["DADATA_API_KEY"],
     }),
+    # Local app OAuth: client_id / client_secret go as query parameters to oauth.bitrix24.tech only.
+    "B24HUB App OAuth": ("httpCustomAuth", lambda e: {
+        "json": json.dumps({"qs": {"client_id": e.get("B24_APP_CLIENT_ID") or "pending",
+                                   "client_secret": e.get("B24_APP_CLIENT_SECRET") or "pending"}}),
+        "allowedHttpRequestDomains": "domains", "allowedDomains": "oauth.bitrix24.tech",
+    }),
 }
 
 ALLOWED_SETTINGS = {
