@@ -15,6 +15,10 @@
 | `[B24HUB] 04 b24 events` | `ONCRMDEALUPDATE` (push): `auth[application_token]` check (403), re-reads the deal with `crm.deal.get`, closes the SLA via `lib sla_close`. |
 | `[B24HUB] 04b deal poller` | Safety net every minute: open SLAs → `crm.deal.list` (`@ID`, `!STAGE_ID: NEW`) → `lib sla_close`. Status by `MOVED_TIME` ([ADR 0009](docs/adr/0009-deal-events-and-poller.md)). |
 | `[B24HUB] lib sla_close` | The only place an SLA is closed: met / breached, SLA item stage, journal. |
+| `[B24HUB] 05 app install` / `05 app` | Local server app: install handler (verifies the request with one `batch`, binds events, registers the robot and the deal tab, stores OAuth tokens, `BX24.installFinish()`), and the app page with live counters ([ADR 0010](docs/adr/0010-local-app.md)). |
+| `[B24HUB] 05a robot inn check` | Robot «Проверить контрагента по ИНН»: `application_token` check → DaData → `bizproc.event.send`. |
+| `[B24HUB] 05b deal tab` | Tab «Интеграция» in the deal card: what the hub did with this lead and why, from `lead_events`. |
+| `[B24HUB] lib b24_app_token` | OAuth refresh on `expired_token`, one refresher at a time, `refresh_token` replaced on every refresh. |
 | `[B24HUB] 99 error handler` | Error Workflow for all of the above: `errors` table + Telegram alert with a link to the execution. |
 | `[B24HUB] 90 test harness`, `91 b24 mock` | Test entry point for the lib, and a deterministic Bitrix24 failure simulator (inactive by default). |
 

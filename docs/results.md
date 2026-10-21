@@ -147,3 +147,14 @@ None of the requests to `04` came from Bitrix24 while the form was saving.
 | overdue, already escalated, moved to EXECUTING | poller closes `breached` | 2756 |
 | deal moved + `ONCRMDEALUPDATE` | closed by `04` through `lib sla_close`; the poller does not close it again | 2755 |
 | deal left in NEW | untouched | — |
+
+## Stage 4 — local app, before install (simulated requests, 2026-10-21)
+| Request | Response |
+|---|---|
+| install, no parameters | 403 «Установка не завершена: missing AUTH_ID …», nothing stored |
+| install, fake `AUTH_ID` for our portal | 403, portal answered `invalid_token`; `b24_app` stays empty |
+| install from another portal | 403 before any call to Bitrix24 |
+| deal tab / app page without an installed app | 403 |
+| robot / ONAPPUNINSTALL with a wrong `application_token` | 403 |
+| `04` with the outbound token | 200 (unchanged) |
+| `lib b24_call` webhook mode (`user.get`) | ok (harness execution 2854) |
