@@ -1,6 +1,7 @@
 # b24-lead-hub — Lead Intake & SLA Hub for Bitrix24
 
-> Work in progress. Stage 1 of 5 is done: infrastructure, intake, REST wrapper, error handling.
+> Work in progress. Stages 1–2 of 5 are done: intake, REST wrapper, error handling, processing pipeline,
+> SLA smart process, load replay (500 requests → 0 duplicates in CRM, see [docs/results.md](docs/results.md)).
 > The full README (problem → solution → measured results) comes in stage 5.
 
 ## What is already here
@@ -8,6 +9,8 @@
 |---|---|
 | `[B24HUB] 01 intake` | HTTPS webhook → header secret → schema validation → `INSERT … ON CONFLICT DO NOTHING` into `inbox` → `200` immediately. Invalid → `422` + row in `intake_rejects`. |
 | `[B24HUB] lib b24_call` | The only path to Bitrix24: global ≤2 rps throttle, errors parsed from the body even on HTTP 200, exponential backoff on `QUERY_LIMIT_EXCEEDED` / `OPERATION_TIME_LIMIT`, every attempt journaled with `time.operating`. |
+| `[B24HUB] 02 process` | Every 15 s: claims up to 10 inbox rows with `FOR UPDATE SKIP LOCKED`, runs each through `02a`, failed → backoff 1/2/4/8 min, 5 attempts. |
+| `[B24HUB] 02a process lead` | Normalize (E.164, e-mail, INN checksum) → per-client lock → DaData (cached) → one lookup batch (`crm.duplicate.findbycomm`, company by INN, own deal by `ORIGIN_ID`) → routing (`route_lead()`: own client → own manager, rules, least loaded) → one create batch: company + requisite + contact + deal + task + SLA item (`crm.item.add`) + timeline comment. Re-runs repair a half-created lead instead of duplicating it. |
 | `[B24HUB] 99 error handler` | Error Workflow for all of the above: `errors` table + Telegram alert with a link to the execution. |
 | `[B24HUB] 90 test harness`, `91 b24 mock` | Test entry point for the lib, and a deterministic Bitrix24 failure simulator (inactive by default). |
 
