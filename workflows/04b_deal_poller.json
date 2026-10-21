@@ -1,0 +1,179 @@
+{
+  "active": true,
+  "connections": {
+    "Chunks of 50": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "b24: deal.list",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Every minute": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Open SLAs",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Open SLAs": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Chunks of 50",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Responded deals": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "sla_close",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "b24: deal.list": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Responded deals",
+            "type": "main"
+          }
+        ]
+      ]
+    }
+  },
+  "name": "[B24HUB] 04b deal poller",
+  "nodes": [
+    {
+      "id": "00e32784-855d-5531-8ca3-4bd529221962",
+      "name": "Chunks of 50",
+      "parameters": {
+        "jsCode": "// One crm.deal.list per 50 open deals, asking only for those that already left the first stage.\nconst ids = $json.deal_ids ?? [];\nconst out = [];\nfor (let i = 0; i < ids.length; i += 50) {\n  out.push({ json: { method: 'crm.deal.list', caller_workflow: $workflow.name, caller_execution_id: $execution.id,\n    params: { filter: { '@ID': ids.slice(i, i + 50), '!STAGE_ID': 'NEW' }, select: ['ID', 'STAGE_ID', 'MOVED_TIME'] } } });\n}\nreturn out;\n"
+      },
+      "position": [
+        440,
+        300
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "id": "75cd36c5-217a-56b8-aa1a-3accab31c638",
+      "name": "Every minute",
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 1
+            }
+          ]
+        }
+      },
+      "position": [
+        0,
+        300
+      ],
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2
+    },
+    {
+      "credentials": {
+        "postgres": {
+          "name": "B24HUB Postgres"
+        }
+      },
+      "id": "25a9f9dd-7fbf-5b01-826f-7342c3660359",
+      "name": "Open SLAs",
+      "parameters": {
+        "operation": "executeQuery",
+        "options": {},
+        "query": "SELECT coalesce(json_agg(deal_id ORDER BY sla_due), '[]') AS deal_ids\n  FROM (SELECT deal_id, sla_due FROM assignments\n         WHERE sla_closed_at IS NULL AND deal_id IS NOT NULL ORDER BY sla_due LIMIT 1000) x"
+      },
+      "position": [
+        220,
+        300
+      ],
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6
+    },
+    {
+      "id": "deb92750-ae8a-5216-b24a-5014c5146f74",
+      "name": "Responded deals",
+      "parameters": {
+        "jsCode": "const out = [];\nfor (const r of $input.all()) {\n  if (!r.json.ok) throw new Error(`crm.deal.list failed: ${r.json.error_code} ${r.json.error_description ?? ''}`);\n  for (const d of r.json.result ?? []) {\n    if (/^C\\d+:NEW$/.test(String(d.STAGE_ID))) continue;  // first stage of a non-default pipeline\n    out.push({ json: { deal_id: Number(d.ID), deal_stage: d.STAGE_ID, responded_at: d.MOVED_TIME,\n                       closed_by: 'poller', caller_execution_id: $execution.id } });\n  }\n}\nreturn out;\n"
+      },
+      "position": [
+        880,
+        300
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "id": "7a281a6f-2bfa-55dc-838b-19ce6b8aabb5",
+      "name": "b24: deal.list",
+      "parameters": {
+        "mode": "each",
+        "options": {
+          "waitForSubWorkflow": true
+        },
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "@name:[B24HUB] lib b24_call"
+        }
+      },
+      "position": [
+        660,
+        300
+      ],
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1
+    },
+    {
+      "id": "d178334e-faf7-547c-9054-a3b9c9744fea",
+      "name": "sla_close",
+      "parameters": {
+        "mode": "each",
+        "options": {
+          "waitForSubWorkflow": true
+        },
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "@name:[B24HUB] lib sla_close"
+        }
+      },
+      "position": [
+        1100,
+        300
+      ],
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1
+    }
+  ],
+  "settings": {
+    "errorWorkflow": "@name:[B24HUB] 99 error handler",
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "none"
+  }
+}
