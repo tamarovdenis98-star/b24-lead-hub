@@ -32,6 +32,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from b24 import B24  # noqa: E402
+from check_crm_links import check as check_links, journal as link_journal  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 REAL_INNS = ["7707083893", "7736207543", "7740000076", "7736050003", "7712040126", "7710140679", "7704217370", "7702070139"]
@@ -140,11 +141,12 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--run-id", default=datetime.now().strftime("r%m%d%H%M"))
     ap.add_argument("--concurrency", type=int, default=8)
+    ap.add_argument("--seed", type=int, default=42, help="data generator seed (change it to avoid matching earlier runs' contacts)")
     ap.add_argument("--timeout-min", type=int, default=40)
     ap.add_argument("--no-write", action="store_true", help="print the report, do not touch docs/results.md")
     args = ap.parse_args()
     url, secret = os.environ["INTAKE_URL"], os.environ["INTAKE_SECRET"]
-    reqs = build_requests(args.run_id)
+    reqs = build_requests(args.run_id, args.seed)
     kinds = Counter(r["kind"] for r in reqs)
     print(f"run {args.run_id}: {len(reqs)} requests {dict(kinds)}", flush=True)
 
@@ -223,6 +225,9 @@ def main() -> None:
     contact_dup = sum(n - 1 for n in comm.values() if n > 1)
     company_dup = sum(n - 1 for n in Counter(c["ORIGIN_ID"] for c in companies).values() if n > 1)
     missing = set(map(int, db["deal_ids"])) - {int(d["ID"]) for d in run_deals}
+    # links: deal -> contact / company recorded in the journal, SLA item -> deal (the stage-2 defect)
+    sla_type = b.result("crm.type.list", {"filter": {"title": "Контроль SLA"}})["types"][0]["entityTypeId"]
+    link_counts, _ = check_links(b, link_journal(set(map(int, db["deal_ids"]))), sla_type)
 
     lat = [r["latency"] * 1000 for r in results if r["status"] in (200, 422)]
     secs = db["secs"]
@@ -243,7 +248,9 @@ def main() -> None:
         "send_s": round(send_s, 1), "wall_s": round(wall_s, 1),
         "crm": {"deals": len(run_deals), "duplicate_deals": deal_dup, "duplicate_contacts": contact_dup,
                 "duplicate_companies": company_dup, "deals_missing_in_crm": len(missing),
-                "contacts_total": len(contacts), "companies_total": len(companies)},
+                "contacts_total": len(contacts), "companies_total": len(companies),
+                "links_ok": link_counts.get("ok", 0),
+                "link_problems": {k: v for k, v in link_counts.items() if k not in ("ok", "with problems")}},
         "routing": {"by_manager": db["by_manager"], "own_client_rule": db["own_client"]},
         "b24": {"calls": db["b24_calls"], "retries": db["b24_retries"], "limit_hits": db["limit_hits"], "errors": db["b24_errors"]},
         "dadata": {"calls": db["dadata_calls"], "cache_hits": db["dadata_cache_hits"]},
@@ -260,7 +267,7 @@ def write_report(r: dict) -> None:
     crm = r["crm"]
     t = r["time_to_crm_s"]
     md = f"""<!-- replay:start -->
-## Stage 2 — load replay `{r['run_id']}` ({r['started_utc']} UTC)
+## Load replay `{r['run_id']}` ({r['started_utc']} UTC)
 
 `python scripts/replay_load.py` → {r['requests']} requests through the public intake
 (concurrency 8, from a laptop over the internet): {r['kinds'].get('unique', 0)} unique, {r['kinds'].get('duplicate', 0)} resends
@@ -271,6 +278,7 @@ of earlier requests (20%), {r['kinds'].get('invalid_schema', 0) + r['kinds'].get
 | **Duplicate deals in CRM** | **{crm['duplicate_deals']}** |
 | **Duplicate contacts in CRM** (same phone/e-mail) | **{crm['duplicate_contacts']}** |
 | Duplicate companies (same INN) | {crm['duplicate_companies']} |
+| **CRM links correct** (deal → contact / company, SLA item → deal) | **{crm['links_ok']} of {crm['deals']}** {crm['link_problems'] or ''} |
 | Processed (done + rejected) / accepted | **{r['processed_pct']}%** ({r['done']} + {r['rejected']} of {r['inbox_rows']}; expected rows {r['expected_rows']}) |
 | Failed (no attempts left) | {r['failed']} |
 | Intake answers | {r['intake_new']} new, {r['intake_duplicate']} duplicate, HTTP {r['http']} |
