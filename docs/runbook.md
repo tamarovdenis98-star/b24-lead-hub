@@ -57,3 +57,25 @@ sla_status = 'open' AND sla_due < now()` — every row is an escalation.
 python scripts/check_crm_links.py            # deal -> contact / company, SLA item -> deal
 python scripts/check_crm_links.py --fix      # repair from inbox.result
 ```
+
+## Reverse proxy requirements (local app)
+Bitrix24 fetches the site root cross-origin and shows the app pages in an iframe. n8n sends
+`Cross-Origin-Resource-Policy: same-origin` + `X-Frame-Options: SAMEORIGIN` on `/` and
+`Content-Security-Policy: sandbox …` (opaque origin, breaks the BX24 SDK and `installFinish`) on webhooks.
+The proxy overrides this **only** for the root and `/webhook/b24hub/app*` (Caddy, inside the n8n site block):
+```caddyfile
+@b24root path /
+header @b24root >Cross-Origin-Resource-Policy cross-origin
+
+@b24app path /webhook/b24hub/app /webhook/b24hub/app/*
+header @b24app {
+	>Content-Security-Policy "frame-ancestors https://*.bitrix24.ru"
+	>Cross-Origin-Resource-Policy cross-origin
+	-X-Frame-Options
+}
+```
+The editor (`/signin`, `/home/...`) keeps `same-origin` / `SAMEORIGIN`; other webhooks keep n8n's sandbox CSP.
+
+After editing a bind-mounted Caddyfile check that the container sees it
+(`docker exec app-caddy-1 grep -c b24hub /etc/caddy/Caddyfile`): an editor that replaces the file
+leaves the container on the old inode, and `caddy reload` then silently reloads the old config.

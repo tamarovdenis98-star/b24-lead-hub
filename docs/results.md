@@ -158,3 +158,20 @@ None of the requests to `04` came from Bitrix24 while the form was saving.
 | robot / ONAPPUNINSTALL with a wrong `application_token` | 403 |
 | `04` with the outbound token | 200 (unchanged) |
 | `lib b24_call` webhook mode (`user.get`) | ok (harness execution 2854) |
+
+### Install on the portal and the reverse proxy fix (2026-10-22)
+- Server side of the install worked (execution 9526): tokens stored, ONCRMDEALUPDATE / ONAPPUNINSTALL bound,
+  robot `b24hub_inn_check` and tab CRM_DEAL_DETAIL_TAB registered, installer = admin #1.
+- But `app.info` reported `INSTALLED: false`: n8n serves webhook HTML with `CSP: sandbox` without
+  `allow-same-origin`, so the BX24 SDK in the iframe could not reach the portal and `installFinish` never arrived.
+  Bitrix24 then re-opened the install path by GET (404: webhook was POST-only) and blocked the root
+  (`ERR_BLOCKED_BY_RESPONSE.NotSameOrigin`, CORP `same-origin` from n8n).
+- Fix: install / app / tab accept GET and POST; GET install = status page that finishes the install only if
+  Bitrix24 says it is not installed; GET app / tab = SDK bootstrap that re-posts the viewer's auth for the usual
+  server-side check. Caddy overrides CORP on `/` and CSP/CORP/XFO on `/webhook/b24hub/app*` only.
+
+| Path | Before | After |
+|---|---|---|
+| `GET /` | CORP same-origin, XFO SAMEORIGIN | CORP cross-origin, XFO SAMEORIGIN |
+| `/webhook/b24hub/app*` (GET/POST) | GET 404; CSP sandbox | 200 / 403 by auth; CSP `frame-ancestors https://*.bitrix24.ru`, CORP cross-origin |
+| `/signin`, `/home/*`, other webhooks | — | unchanged |
