@@ -6,7 +6,7 @@
         [
           {
             "index": 0,
-            "node": "Verify event token",
+            "node": "Parse event",
             "type": "main"
           }
         ],
@@ -25,6 +25,24 @@
           {
             "index": 0,
             "node": "Installed?",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Event auth ok?": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Re-key app",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Respond event 403",
             "type": "main"
           }
         ]
@@ -139,6 +157,17 @@
         ]
       ]
     },
+    "Parse event": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Verify event token",
+            "type": "main"
+          }
+        ]
+      ]
+    },
     "Precheck": {
       "main": [
         [
@@ -168,12 +197,74 @@
         ]
       ]
     },
+    "Prepare setup": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Run app setup",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Re-key app": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Respond event 200",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Re-key event?": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Verify event access_token",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Event token ok?",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Respond event 200": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Setup after re-key?",
+            "type": "main"
+          }
+        ]
+      ]
+    },
     "Save app": {
       "main": [
         [
           {
             "index": 0,
             "node": "Success page",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Setup after re-key?": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Prepare setup",
             "type": "main"
           }
         ]
@@ -201,12 +292,23 @@
         ]
       ]
     },
+    "Verify event access_token": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Event auth ok?",
+            "type": "main"
+          }
+        ]
+      ]
+    },
     "Verify event token": {
       "main": [
         [
           {
             "index": 0,
-            "node": "Event token ok?",
+            "node": "Re-key event?",
             "type": "main"
           }
         ]
@@ -253,7 +355,7 @@
       "id": "f2bb0c67-7d45-58c5-9454-02e9a2c930a6",
       "name": "Check install",
       "parameters": {
-        "jsCode": "// The batch authenticates the request: an invalid AUTH_ID fails every command.\nconst p = $('Precheck').first().json;\nconst body = $json.body ?? {};\nconst res = body.result?.result ?? {}, errs = body.result?.result_error ?? {};\nconst err = (k) => errs[k] ? `${errs[k].error ?? ''} ${errs[k].error_description ?? ''}`.trim() : null;\nconst problems = [];\nif (body.error) problems.push(`auth: ${body.error} ${body.error_description ?? ''}`);\nif (!res.info) problems.push(`app.info: ${err('info') ?? 'no result'}`);\nif (res.profile && !res.profile.ADMIN) problems.push('the installing user is not a portal administrator');\nconst ignorable = (k) => !errs[k] || /already|ALREADY/i.test(err(k));\nfor (const k of ['ev_deal', 'ev_uninstall', 'robot_add']) if (!ignorable(k)) problems.push(`${k}: ${err(k)}`);\nfor (const k of ['robot_update', 'tab_bind']) if (errs[k]) problems.push(`${k}: ${err(k)}`);\nconst bound = (res.events ?? []).map((e) => `${e.event}->${e.handler}`);\nfor (const ev of ['ONCRMDEALUPDATE', 'ONAPPUNINSTALL']) if (!bound.some((x) => x.startsWith(ev))) problems.push(`event ${ev} not bound`);\nconst report = {\n  app: res.info ? { id: res.info.ID, code: res.info.CODE, version: res.info.VERSION, scope: res.info.SCOPE } : null,\n  installer: res.profile ? { id: res.profile.ID, admin: res.profile.ADMIN } : null,\n  events: bound, robots: res.robots ?? [], placement: errs.tab_bind ? null : 'CRM_DEAL_DETAIL_TAB',\n  ignored: Object.fromEntries(['ev_deal', 'ev_uninstall', 'robot_add', 'tab_unbind'].filter((k) => errs[k]).map((k) => [k, err(k)])),\n};\nreturn [{ json: { ...p, ok: problems.length === 0, problems, report } }];\n"
+        "jsCode": "function qs(obj, prefix) {\n  return Object.entries(obj).filter(([, v]) => v !== undefined && v !== null).map(([k, v]) => {\n    const key = prefix ? `${prefix}[${k}]` : k;\n    if (v && typeof v === 'object') return qs(v, key);\n    return `${key}=${encodeURIComponent(String(v))}`;\n  }).filter(Boolean).join('&');\n}\n\nconst URL = {\"install\": \"https://n8n.144-31-229-139.sslip.io/webhook/b24hub/app/install\", \"handler\": \"https://n8n.144-31-229-139.sslip.io/webhook/b24hub/app\", \"robot\": \"https://n8n.144-31-229-139.sslip.io/webhook/b24hub/app/robot\", \"tab\": \"https://n8n.144-31-229-139.sslip.io/webhook/b24hub/app/tab\", \"app_events\": \"https://n8n.144-31-229-139.sslip.io/webhook/b24hub/app/events\", \"deal_events\": \"https://n8n.144-31-229-139.sslip.io/webhook/b24hub/b24-events\"};\nconst ROBOT = {\"CODE\": \"b24hub_inn_check\", \"HANDLER\": \"https://n8n.144-31-229-139.sslip.io/webhook/b24hub/app/robot\", \"USE_SUBSCRIPTION\": \"Y\", \"NAME\": {\"ru\": \"Проверить контрагента по ИНН\", \"en\": \"Check counterparty by INN\"}, \"DESCRIPTION\": {\"ru\": \"DaData: наименование, статус, КПП, ОГРН, адрес по ИНН (b24-lead-hub)\"}, \"PROPERTIES\": {\"INN\": {\"Name\": {\"ru\": \"ИНН\", \"en\": \"INN\"}, \"Type\": \"string\", \"Required\": \"Y\"}}, \"RETURN_PROPERTIES\": {\"CHECK_RESULT\": {\"Name\": {\"ru\": \"Результат проверки\"}, \"Type\": \"string\"}, \"COMPANY_NAME\": {\"Name\": {\"ru\": \"Наименование\"}, \"Type\": \"string\"}, \"STATUS\": {\"Name\": {\"ru\": \"Статус (ЕГРЮЛ)\"}, \"Type\": \"string\"}, \"IS_ACTIVE\": {\"Name\": {\"ru\": \"Действующая\"}, \"Type\": \"bool\"}, \"KPP\": {\"Name\": {\"ru\": \"КПП\"}, \"Type\": \"string\"}, \"OGRN\": {\"Name\": {\"ru\": \"ОГРН\"}, \"Type\": \"string\"}, \"ADDRESS\": {\"Name\": {\"ru\": \"Адрес\"}, \"Type\": \"text\"}}, \"DOCUMENT_TYPE\": [\"crm\", \"CCrmDocumentDeal\", \"DEAL\"], \"FILTER\": {\"INCLUDE\": [[\"crm\", \"CCrmDocumentDeal\"]]}};\nfunction setupCmd() {\n  const { CODE, ...robotFields } = ROBOT;\n  return {\n    info: 'app.info',\n    profile: 'profile',\n    ev_deal: 'event.bind?' + qs({ event: 'ONCRMDEALUPDATE', handler: URL.deal_events }),\n    ev_uninstall: 'event.bind?' + qs({ event: 'ONAPPUNINSTALL', handler: URL.app_events }),\n    robot_add: 'bizproc.robot.add?' + qs(ROBOT),\n    robot_update: 'bizproc.robot.update?' + qs({ CODE, FIELDS: robotFields }),\n    tab_unbind: 'placement.unbind?' + qs({ PLACEMENT: 'CRM_DEAL_DETAIL_TAB', HANDLER: URL.tab }),\n    tab_bind: 'placement.bind?' + qs({ PLACEMENT: 'CRM_DEAL_DETAIL_TAB', HANDLER: URL.tab, TITLE: 'Интеграция',\n                                       LANG_ALL: { ru: { TITLE: 'Интеграция' }, en: { TITLE: 'Integration' } } }),\n    events: 'event.get',\n    robots: 'bizproc.robot.list',\n    placements: 'placement.get',\n  };\n}\n// Same verdict for both callers: known \"already exists\" answers are fine, the end state is what counts.\nfunction checkSetup(res, errs) {\n  const err = (k) => errs[k] ? `${errs[k].error ?? ''} ${errs[k].error_description ?? ''}`.trim() : null;\n  const problems = [];\n  if (!res.info) problems.push(`app.info: ${err('info') ?? 'no result'}`);\n  if (res.profile && !res.profile.ADMIN) problems.push('the user is not a portal administrator');\n  const ignorable = (k) => !errs[k] || /already|ALREADY/i.test(err(k));\n  for (const k of ['ev_deal', 'ev_uninstall', 'robot_add']) if (!ignorable(k)) problems.push(`${k}: ${err(k)}`);\n  for (const k of ['robot_update', 'tab_bind']) if (errs[k]) problems.push(`${k}: ${err(k)}`);\n  const bound = (res.events ?? []).map((e) => `${e.event}->${e.handler}`);\n  for (const ev of ['ONCRMDEALUPDATE', 'ONAPPUNINSTALL']) if (!bound.some((x) => x.startsWith(ev))) problems.push(`event ${ev} not bound`);\n  if (res.robots && !res.robots.includes(ROBOT.CODE)) problems.push(`robot ${ROBOT.CODE} not registered`);\n  if (res.placements && !res.placements.some((x) => x.placement === 'CRM_DEAL_DETAIL_TAB')) problems.push('placement CRM_DEAL_DETAIL_TAB not bound');\n  const report = {\n    app: res.info ? { id: res.info.ID, code: res.info.CODE, version: res.info.VERSION, installed: res.info.INSTALLED } : null,\n    installer: res.profile ? { id: res.profile.ID, admin: res.profile.ADMIN } : null,\n    events: bound, robots: res.robots ?? [], placements: (res.placements ?? []).map((x) => x.placement),\n    ignored: Object.fromEntries(['ev_deal', 'ev_uninstall', 'robot_add', 'tab_unbind'].filter((k) => errs[k]).map((k) => [k, err(k)])),\n    at: new Date().toISOString(),\n  };\n  return { ok: problems.length === 0, problems, report };\n}\n\n// The batch authenticates the request: an invalid AUTH_ID fails every command.\nconst p = $('Precheck').first().json;\nconst body = $json.body ?? {};\nconst v = checkSetup(body.result?.result ?? {}, body.result?.result_error ?? {});\nif (body.error) v.problems.unshift(`auth: ${body.error} ${body.error_description ?? ''}`);\nreturn [{ json: { ...p, ok: v.problems.length === 0, problems: v.problems, report: v.report } }];\n"
       },
       "position": [
         1320,
@@ -263,15 +365,15 @@
       "typeVersion": 2
     },
     {
-      "id": "4e972a9a-4ec8-5a21-94ba-a9509c5bb3ba",
-      "name": "Event token ok?",
+      "id": "9f23e017-a7f4-5953-b3d0-c34af257204a",
+      "name": "Event auth ok?",
       "parameters": {
         "conditions": {
           "combinator": "and",
           "conditions": [
             {
-              "id": "a712c98e-889b-5861-b3a4-d5316eb0e4b5",
-              "leftValue": "={{ $json.valid }}",
+              "id": "6aa30155-ebf5-515a-892d-77a897e6b833",
+              "leftValue": "={{ !!$json.body?.result?.ID }}",
               "operator": {
                 "operation": "true",
                 "singleValue": true,
@@ -290,8 +392,42 @@
         "options": {}
       },
       "position": [
-        660,
-        160
+        1320,
+        60
+      ],
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2
+    },
+    {
+      "id": "4e972a9a-4ec8-5a21-94ba-a9509c5bb3ba",
+      "name": "Event token ok?",
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "a712c98e-889b-5861-b3a4-d5316eb0e4b5",
+              "leftValue": "={{ $json.ev.valid }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        1100,
+        260
       ],
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2
@@ -451,10 +587,23 @@
       "typeVersion": 2
     },
     {
+      "id": "a8d1946b-af69-5ef6-bb9c-c17335e2f99e",
+      "name": "Parse event",
+      "parameters": {
+        "jsCode": "// Form-encoded event: flat keys like auth[application_token]. ONAPPINSTALL / ONAPPUPDATE carry a NEW\n// application_token (Bitrix24 re-keys the app after installFinish), so they cannot be checked against the\n// stored one: they are authenticated by their own access_token (docs: \"safe event handlers\").\nconst b = $json.body ?? {};\nconst a = (k) => b.auth?.[k] ?? b[`auth[${k}]`] ?? null;\nconst event = String(b.event ?? '').toUpperCase();\nreturn [{ json: { event, rekey: ['ONAPPINSTALL', 'ONAPPUPDATE'].includes(event),\n  application_token: a('application_token'), access_token: a('access_token'), refresh_token: a('refresh_token'),\n  expires_in: Number(a('expires_in') ?? 3600), member_id: a('member_id'), domain: String(a('domain') ?? '').toLowerCase(),\n  client_endpoint: a('client_endpoint') } }];\n"
+      },
+      "position": [
+        440,
+        160
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
       "id": "3cfa8247-4b10-59b0-9aa7-bad3faeb7d25",
       "name": "Precheck",
       "parameters": {
-        "jsCode": "function qs(obj, prefix) {\n  return Object.entries(obj).filter(([, v]) => v !== undefined && v !== null).map(([k, v]) => {\n    const key = prefix ? `${prefix}[${k}]` : k;\n    if (v && typeof v === 'object') return qs(v, key);\n    return `${key}=${encodeURIComponent(String(v))}`;\n  }).filter(Boolean).join('&');\n}\n\n// Only our portal may install; the AUTH_ID itself is verified by the batch below (it must work on that portal).\nconst r = $json.r;\nconst portalHost = String(r.portal_url ?? '').replace(/^https?:\\/\\//, '').replace(/\\/.*$/, '').toLowerCase();\nconst problems = [];\nif (!r.auth_id || !r.refresh_id || !r.application_token || !r.member_id) problems.push('missing AUTH_ID / REFRESH_ID / APPLICATION_TOKEN / member_id');\nif (!portalHost || r.domain !== portalHost) problems.push(`portal ${r.domain || '?'} is not the configured portal`);\nconst URL = {\"install\": \"https://n8n.144-31-229-139.sslip.io/webhook/b24hub/app/install\", \"handler\": \"https://n8n.144-31-229-139.sslip.io/webhook/b24hub/app\", \"robot\": \"https://n8n.144-31-229-139.sslip.io/webhook/b24hub/app/robot\", \"tab\": \"https://n8n.144-31-229-139.sslip.io/webhook/b24hub/app/tab\", \"app_events\": \"https://n8n.144-31-229-139.sslip.io/webhook/b24hub/app/events\", \"deal_events\": \"https://n8n.144-31-229-139.sslip.io/webhook/b24hub/b24-events\"};\nconst ROBOT = {\"CODE\": \"b24hub_inn_check\", \"HANDLER\": \"https://n8n.144-31-229-139.sslip.io/webhook/b24hub/app/robot\", \"USE_SUBSCRIPTION\": \"Y\", \"NAME\": {\"ru\": \"Проверить контрагента по ИНН\", \"en\": \"Check counterparty by INN\"}, \"DESCRIPTION\": {\"ru\": \"DaData: наименование, статус, КПП, ОГРН, адрес по ИНН (b24-lead-hub)\"}, \"PROPERTIES\": {\"INN\": {\"Name\": {\"ru\": \"ИНН\", \"en\": \"INN\"}, \"Type\": \"string\", \"Required\": \"Y\"}}, \"RETURN_PROPERTIES\": {\"CHECK_RESULT\": {\"Name\": {\"ru\": \"Результат проверки\"}, \"Type\": \"string\"}, \"COMPANY_NAME\": {\"Name\": {\"ru\": \"Наименование\"}, \"Type\": \"string\"}, \"STATUS\": {\"Name\": {\"ru\": \"Статус (ЕГРЮЛ)\"}, \"Type\": \"string\"}, \"IS_ACTIVE\": {\"Name\": {\"ru\": \"Действующая\"}, \"Type\": \"bool\"}, \"KPP\": {\"Name\": {\"ru\": \"КПП\"}, \"Type\": \"string\"}, \"OGRN\": {\"Name\": {\"ru\": \"ОГРН\"}, \"Type\": \"string\"}, \"ADDRESS\": {\"Name\": {\"ru\": \"Адрес\"}, \"Type\": \"text\"}}, \"DOCUMENT_TYPE\": [\"crm\", \"CCrmDocumentDeal\", \"DEAL\"], \"FILTER\": {\"INCLUDE\": [[\"crm\", \"CCrmDocumentDeal\"]]}};\nconst { CODE, ...robotFields } = ROBOT;\nconst cmd = {\n  info: 'app.info',\n  profile: 'profile',\n  ev_deal: 'event.bind?' + qs({ event: 'ONCRMDEALUPDATE', handler: URL.deal_events }),\n  ev_uninstall: 'event.bind?' + qs({ event: 'ONAPPUNINSTALL', handler: URL.app_events }),\n  robot_add: 'bizproc.robot.add?' + qs(ROBOT),\n  robot_update: 'bizproc.robot.update?' + qs({ CODE, FIELDS: robotFields }),\n  tab_unbind: 'placement.unbind?' + qs({ PLACEMENT: 'CRM_DEAL_DETAIL_TAB', HANDLER: URL.tab }),\n  tab_bind: 'placement.bind?' + qs({ PLACEMENT: 'CRM_DEAL_DETAIL_TAB', HANDLER: URL.tab, TITLE: 'Интеграция',\n                                     LANG_ALL: { ru: { TITLE: 'Интеграция' }, en: { TITLE: 'Integration' } } }),\n  events: 'event.get',\n  robots: 'bizproc.robot.list',\n};\nreturn [{ json: { ...r, problems, cmd, client_endpoint: `https://${r.domain}/rest/` } }];\n"
+        "jsCode": "function qs(obj, prefix) {\n  return Object.entries(obj).filter(([, v]) => v !== undefined && v !== null).map(([k, v]) => {\n    const key = prefix ? `${prefix}[${k}]` : k;\n    if (v && typeof v === 'object') return qs(v, key);\n    return `${key}=${encodeURIComponent(String(v))}`;\n  }).filter(Boolean).join('&');\n}\n\nconst URL = {\"install\": \"https://n8n.144-31-229-139.sslip.io/webhook/b24hub/app/install\", \"handler\": \"https://n8n.144-31-229-139.sslip.io/webhook/b24hub/app\", \"robot\": \"https://n8n.144-31-229-139.sslip.io/webhook/b24hub/app/robot\", \"tab\": \"https://n8n.144-31-229-139.sslip.io/webhook/b24hub/app/tab\", \"app_events\": \"https://n8n.144-31-229-139.sslip.io/webhook/b24hub/app/events\", \"deal_events\": \"https://n8n.144-31-229-139.sslip.io/webhook/b24hub/b24-events\"};\nconst ROBOT = {\"CODE\": \"b24hub_inn_check\", \"HANDLER\": \"https://n8n.144-31-229-139.sslip.io/webhook/b24hub/app/robot\", \"USE_SUBSCRIPTION\": \"Y\", \"NAME\": {\"ru\": \"Проверить контрагента по ИНН\", \"en\": \"Check counterparty by INN\"}, \"DESCRIPTION\": {\"ru\": \"DaData: наименование, статус, КПП, ОГРН, адрес по ИНН (b24-lead-hub)\"}, \"PROPERTIES\": {\"INN\": {\"Name\": {\"ru\": \"ИНН\", \"en\": \"INN\"}, \"Type\": \"string\", \"Required\": \"Y\"}}, \"RETURN_PROPERTIES\": {\"CHECK_RESULT\": {\"Name\": {\"ru\": \"Результат проверки\"}, \"Type\": \"string\"}, \"COMPANY_NAME\": {\"Name\": {\"ru\": \"Наименование\"}, \"Type\": \"string\"}, \"STATUS\": {\"Name\": {\"ru\": \"Статус (ЕГРЮЛ)\"}, \"Type\": \"string\"}, \"IS_ACTIVE\": {\"Name\": {\"ru\": \"Действующая\"}, \"Type\": \"bool\"}, \"KPP\": {\"Name\": {\"ru\": \"КПП\"}, \"Type\": \"string\"}, \"OGRN\": {\"Name\": {\"ru\": \"ОГРН\"}, \"Type\": \"string\"}, \"ADDRESS\": {\"Name\": {\"ru\": \"Адрес\"}, \"Type\": \"text\"}}, \"DOCUMENT_TYPE\": [\"crm\", \"CCrmDocumentDeal\", \"DEAL\"], \"FILTER\": {\"INCLUDE\": [[\"crm\", \"CCrmDocumentDeal\"]]}};\nfunction setupCmd() {\n  const { CODE, ...robotFields } = ROBOT;\n  return {\n    info: 'app.info',\n    profile: 'profile',\n    ev_deal: 'event.bind?' + qs({ event: 'ONCRMDEALUPDATE', handler: URL.deal_events }),\n    ev_uninstall: 'event.bind?' + qs({ event: 'ONAPPUNINSTALL', handler: URL.app_events }),\n    robot_add: 'bizproc.robot.add?' + qs(ROBOT),\n    robot_update: 'bizproc.robot.update?' + qs({ CODE, FIELDS: robotFields }),\n    tab_unbind: 'placement.unbind?' + qs({ PLACEMENT: 'CRM_DEAL_DETAIL_TAB', HANDLER: URL.tab }),\n    tab_bind: 'placement.bind?' + qs({ PLACEMENT: 'CRM_DEAL_DETAIL_TAB', HANDLER: URL.tab, TITLE: 'Интеграция',\n                                       LANG_ALL: { ru: { TITLE: 'Интеграция' }, en: { TITLE: 'Integration' } } }),\n    events: 'event.get',\n    robots: 'bizproc.robot.list',\n    placements: 'placement.get',\n  };\n}\n// Same verdict for both callers: known \"already exists\" answers are fine, the end state is what counts.\nfunction checkSetup(res, errs) {\n  const err = (k) => errs[k] ? `${errs[k].error ?? ''} ${errs[k].error_description ?? ''}`.trim() : null;\n  const problems = [];\n  if (!res.info) problems.push(`app.info: ${err('info') ?? 'no result'}`);\n  if (res.profile && !res.profile.ADMIN) problems.push('the user is not a portal administrator');\n  const ignorable = (k) => !errs[k] || /already|ALREADY/i.test(err(k));\n  for (const k of ['ev_deal', 'ev_uninstall', 'robot_add']) if (!ignorable(k)) problems.push(`${k}: ${err(k)}`);\n  for (const k of ['robot_update', 'tab_bind']) if (errs[k]) problems.push(`${k}: ${err(k)}`);\n  const bound = (res.events ?? []).map((e) => `${e.event}->${e.handler}`);\n  for (const ev of ['ONCRMDEALUPDATE', 'ONAPPUNINSTALL']) if (!bound.some((x) => x.startsWith(ev))) problems.push(`event ${ev} not bound`);\n  if (res.robots && !res.robots.includes(ROBOT.CODE)) problems.push(`robot ${ROBOT.CODE} not registered`);\n  if (res.placements && !res.placements.some((x) => x.placement === 'CRM_DEAL_DETAIL_TAB')) problems.push('placement CRM_DEAL_DETAIL_TAB not bound');\n  const report = {\n    app: res.info ? { id: res.info.ID, code: res.info.CODE, version: res.info.VERSION, installed: res.info.INSTALLED } : null,\n    installer: res.profile ? { id: res.profile.ID, admin: res.profile.ADMIN } : null,\n    events: bound, robots: res.robots ?? [], placements: (res.placements ?? []).map((x) => x.placement),\n    ignored: Object.fromEntries(['ev_deal', 'ev_uninstall', 'robot_add', 'tab_unbind'].filter((k) => errs[k]).map((k) => [k, err(k)])),\n    at: new Date().toISOString(),\n  };\n  return { ok: problems.length === 0, problems, report };\n}\n\n// Only our portal may install; the AUTH_ID itself is verified by the batch below (it must work on that portal).\nconst r = $json.r;\nconst portalHost = String(r.portal_url ?? '').replace(/^https?:\\/\\//, '').replace(/\\/.*$/, '').toLowerCase();\nconst problems = [];\nif (!r.auth_id || !r.refresh_id || !r.application_token || !r.member_id) problems.push('missing AUTH_ID / REFRESH_ID / APPLICATION_TOKEN / member_id');\nif (!portalHost || r.domain !== portalHost) problems.push(`portal ${r.domain || '?'} is not the configured portal`);\nreturn [{ json: { ...r, problems, cmd: setupCmd(), client_endpoint: `https://${r.domain}/rest/` } }];\n"
       },
       "position": [
         660,
@@ -493,6 +642,75 @@
       "position": [
         880,
         300
+      ],
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2
+    },
+    {
+      "id": "9132731b-65dc-5084-8408-dd234153127f",
+      "name": "Prepare setup",
+      "parameters": {
+        "jsCode": "return [{ json: { reason: $('Parse event').first().json.event } }];\n"
+      },
+      "position": [
+        2200,
+        20
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "credentials": {
+        "postgres": {
+          "name": "B24HUB Postgres"
+        }
+      },
+      "id": "f2854e04-c011-52ea-974b-846d9b19048a",
+      "name": "Re-key app",
+      "parameters": {
+        "operation": "executeQuery",
+        "options": {
+          "queryReplacement": "={{ [$('Parse event').first().json.member_id, $('Parse event').first().json.application_token, $('Parse event').first().json.access_token, $('Parse event').first().json.refresh_token ?? '', $('Parse event').first().json.expires_in, $('Parse event').first().json.client_endpoint ?? ''] }}"
+        },
+        "query": "UPDATE b24_app SET application_token = $2, access_token = $3, refresh_token = $4,\n       expires_at = now() + make_interval(secs => $5::int), client_endpoint = coalesce(nullif($6, ''), client_endpoint),\n       status = 'installed', refresh_lock_until = NULL, updated_at = now()\n WHERE member_id = $1\nRETURNING member_id"
+      },
+      "position": [
+        1540,
+        20
+      ],
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6
+    },
+    {
+      "id": "c8f29f4d-65a7-535d-b189-3fd48ebd5c85",
+      "name": "Re-key event?",
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "8437a44c-c220-537f-8e62-379988a743a5",
+              "leftValue": "={{ $json.ev.rekey && $json.ev.portal_ok && !!$('Parse event').first().json.access_token }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        880,
+        160
       ],
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2
@@ -607,6 +825,28 @@
       "typeVersion": 1.4
     },
     {
+      "id": "fbdd4ca1-e378-5782-9af0-5a5b66f2c435",
+      "name": "Run app setup",
+      "parameters": {
+        "mode": "each",
+        "options": {
+          "waitForSubWorkflow": true
+        },
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "@name:[B24HUB] lib app_setup"
+        }
+      },
+      "position": [
+        2420,
+        20
+      ],
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1
+    },
+    {
       "credentials": {
         "postgres": {
           "name": "B24HUB Postgres"
@@ -627,6 +867,40 @@
       ],
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6
+    },
+    {
+      "id": "fb729d5b-7927-527d-96d9-0c7090758ac6",
+      "name": "Setup after re-key?",
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "b892d2c4-8c74-5cfa-b913-61fa34c05b2e",
+              "leftValue": "={{ $('Re-key app').isExecuted }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        1980,
+        20
+      ],
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2
     },
     {
       "id": "f76d4f9f-614a-5183-b25e-fcd10e1aff96",
@@ -655,6 +929,35 @@
       "typeVersion": 2
     },
     {
+      "id": "c24a083f-fcd1-5cf5-a3e4-f0dc602d0351",
+      "maxTries": 3,
+      "name": "Verify event access_token",
+      "parameters": {
+        "jsonBody": "={{ JSON.stringify({ auth: $('Parse event').first().json.access_token }) }}",
+        "method": "POST",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          },
+          "timeout": 20000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "url": "={{ 'https://' + $('Parse event').first().json.domain + '/rest/app.info.json' }}"
+      },
+      "position": [
+        1100,
+        60
+      ],
+      "retryOnFail": true,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "waitBetweenTries": 1000
+    },
+    {
       "credentials": {
         "postgres": {
           "name": "B24HUB Postgres"
@@ -665,12 +968,12 @@
       "parameters": {
         "operation": "executeQuery",
         "options": {
-          "queryReplacement": "={{ [$json.body?.auth?.application_token ?? $json.body?.['auth[application_token]'] ?? '', $json.body?.auth?.member_id ?? $json.body?.['auth[member_id]'] ?? '', String($json.body.event)] }}"
+          "queryReplacement": "={{ [JSON.stringify({ event: $json.event, rekey: $json.rekey, member_id: $json.member_id, domain: $json.domain }), $json.application_token ?? '', $json.member_id ?? '', $json.domain] }}"
         },
-        "query": "SELECT EXISTS (SELECT 1 FROM b24_app WHERE status = 'installed'\n  AND application_token = $1 AND member_id = $2) AS valid, $3 AS event"
+        "query": "SELECT $1::jsonb || jsonb_build_object(\n  'valid', EXISTS (SELECT 1 FROM b24_app WHERE status = 'installed' AND application_token = $2 AND member_id = $3),\n  'portal_ok', $4 = lower(regexp_replace((SELECT value FROM settings WHERE key = 'portal_url'), '^https?://|/.*$', '', 'g'))\n               AND NOT EXISTS (SELECT 1 FROM b24_app WHERE domain = $4 AND member_id <> $3)) AS ev"
       },
       "position": [
-        440,
+        660,
         160
       ],
       "type": "n8n-nodes-base.postgres",
