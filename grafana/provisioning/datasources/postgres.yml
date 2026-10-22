@@ -1,0 +1,16 @@
+apiVersion: 1
+datasources:
+  - name: b24hub
+    uid: b24hub-pg
+    type: grafana-postgresql-datasource
+    url: postgres:5432
+    user: ${RO_DB_USER}
+    jsonData:
+      database: ${PG_DB}
+      sslmode: disable
+      postgresVersion: 1600
+      timescaledb: false
+    secureJsonData:
+      password: ${RO_DB_PASSWORD}
+    isDefault: true
+    editable: false

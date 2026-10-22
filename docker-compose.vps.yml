@@ -7,6 +7,10 @@ services:
     mem_limit: 256m
     networks: [default, proxy]
 
+  grafana:
+    container_name: b24hub-grafana
+    mem_limit: 220m
+
 networks:
   proxy:
     external: true

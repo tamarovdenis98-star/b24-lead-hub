@@ -10,6 +10,7 @@ for f in $(ls /sql/*.sql | sort); do
   echo "apply $v"
   psql -v ON_ERROR_STOP=1 -q --single-transaction \
        -v app_user="$APP_DB_USER" -v app_password="$APP_DB_PASSWORD" \
+       -v ro_user="${RO_DB_USER:-b24hub_ro}" -v ro_password="${RO_DB_PASSWORD:-change-me-ro}" \
        -f "$f" -c "INSERT INTO schema_migrations(version) VALUES ('$v')"
 done
 echo "migrations up to date"
