@@ -103,6 +103,20 @@ def test_concurrent_workers_claim_disjoint_rows():
         assert c.execute("SELECT count(*) FILTER (WHERE status = 'processing' AND attempt_count = 1) FROM inbox").fetchone()[0] == 15
 
 
+def test_claims_never_exceed_max_in_flight():
+    """Overlapping ticks must not pile up workers: claims stop at process_max_in_flight."""
+    with connect() as c:
+        for i in range(25):
+            intake(c, f"web:m{i}")
+        c.execute("UPDATE settings SET value = '12' WHERE key = 'process_max_in_flight'")
+        try:
+            assert len(c.execute(CLAIM).fetchall()) == 10   # batch size
+            assert len(c.execute(CLAIM).fetchall()) == 2    # only the free room
+            assert c.execute(CLAIM).fetchall() == []        # full: the tick does nothing
+        finally:
+            c.execute("UPDATE settings SET value = '20' WHERE key = 'process_max_in_flight'")
+
+
 def test_failed_lead_waits_for_backoff_and_stops_after_max_attempts():
     with connect() as c:
         intake(c, "web:f")
