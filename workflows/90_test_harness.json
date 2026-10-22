@@ -13,7 +13,7 @@
         [
           {
             "index": 0,
-            "node": "Prepare call",
+            "node": "Run setup?",
             "type": "main"
           }
         ]
@@ -30,12 +30,41 @@
         ]
       ]
     },
+    "Run setup?": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "app_setup",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Prepare call",
+            "type": "main"
+          }
+        ]
+      ]
+    },
     "Webhook": {
       "main": [
         [
           {
             "index": 0,
             "node": "Force failure?",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "app_setup": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Respond",
             "type": "main"
           }
         ]
@@ -106,7 +135,7 @@
       "id": "bb46be35-fc7a-5436-9e10-cc7dbef37e43",
       "name": "Prepare call",
       "parameters": {
-        "jsCode": "const b = $json.body;\nreturn [{ json: { method: b.method, params: b.params ?? {}, max_attempts: b.max_attempts,\n                  caller_workflow: $workflow.name, caller_execution_id: $execution.id } }];\n"
+        "jsCode": "const b = $json.body;\nreturn [{ json: { method: b.method, params: b.params ?? {}, max_attempts: b.max_attempts, auth: b.auth,\n                  caller_workflow: $workflow.name, caller_execution_id: $execution.id } }];\n"
       },
       "position": [
         440,
@@ -131,6 +160,40 @@
       "typeVersion": 1.4
     },
     {
+      "id": "1ee0ff91-2920-5b40-97d7-e7499a711bd7",
+      "name": "Run setup?",
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "d34f433e-537f-52e6-865f-c2b336482a9b",
+              "leftValue": "={{ $json.body.setup === true }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        440,
+        600
+      ],
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2
+    },
+    {
       "credentials": {
         "httpHeaderAuth": {
           "name": "B24HUB Intake Secret"
@@ -152,6 +215,28 @@
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.1,
       "webhookId": "7c6215f1-e2de-5bfd-bc4f-8534585f690d"
+    },
+    {
+      "id": "ba3c21fe-e53a-5212-9935-ba5749b33e2a",
+      "name": "app_setup",
+      "parameters": {
+        "mode": "each",
+        "options": {
+          "waitForSubWorkflow": true
+        },
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "@name:[B24HUB] lib app_setup"
+        }
+      },
+      "position": [
+        660,
+        560
+      ],
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1
     },
     {
       "id": "3c7394f4-991d-5f51-bb57-da053e19cb52",
