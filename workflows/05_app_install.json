@@ -1,12 +1,48 @@
 {
   "active": true,
   "connections": {
+    "App event?": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Verify event token",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Parse",
+            "type": "main"
+          }
+        ]
+      ]
+    },
     "Check install": {
       "main": [
         [
           {
             "index": 0,
             "node": "Installed?",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Event token ok?": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Respond event 200",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Respond event 403",
             "type": "main"
           }
         ]
@@ -50,7 +86,25 @@
         [
           {
             "index": 0,
-            "node": "Parse",
+            "node": "Install status",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "App event?",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Install status": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Status page",
             "type": "main"
           }
         ]
@@ -125,6 +179,17 @@
         ]
       ]
     },
+    "Status page": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Respond status",
+            "type": "main"
+          }
+        ]
+      ]
+    },
     "Success page": {
       "main": [
         [
@@ -135,10 +200,55 @@
           }
         ]
       ]
+    },
+    "Verify event token": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Event token ok?",
+            "type": "main"
+          }
+        ]
+      ]
     }
   },
   "name": "[B24HUB] 05 app install",
   "nodes": [
+    {
+      "id": "7ba3a359-3b63-58bd-8edf-8703b40bbfeb",
+      "name": "App event?",
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "3b928519-549f-57ad-a186-b6d7ab394d17",
+              "leftValue": "={{ !!$json.body?.event }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        220,
+        300
+      ],
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2
+    },
     {
       "id": "f2bb0c67-7d45-58c5-9454-02e9a2c930a6",
       "name": "Check install",
@@ -151,6 +261,40 @@
       ],
       "type": "n8n-nodes-base.code",
       "typeVersion": 2
+    },
+    {
+      "id": "4e972a9a-4ec8-5a21-94ba-a9509c5bb3ba",
+      "name": "Event token ok?",
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "a712c98e-889b-5861-b3a4-d5316eb0e4b5",
+              "leftValue": "={{ $json.valid }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        660,
+        160
+      ],
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2
     },
     {
       "credentials": {
@@ -220,7 +364,11 @@
       "id": "435a0e8e-c858-5f27-8a51-acd9196a3ab7",
       "name": "Install request",
       "parameters": {
-        "httpMethod": "POST",
+        "httpMethod": [
+          "GET",
+          "POST"
+        ],
+        "multipleMethods": true,
         "options": {},
         "path": "b24hub/app/install",
         "responseMode": "responseNode"
@@ -232,6 +380,28 @@
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.1,
       "webhookId": "f169a189-ad24-5986-9df9-3e3174bdd9ad"
+    },
+    {
+      "credentials": {
+        "postgres": {
+          "name": "B24HUB Postgres"
+        }
+      },
+      "id": "516fd2c4-e9e5-576b-88bd-b8184f9825ff",
+      "name": "Install status",
+      "parameters": {
+        "operation": "executeQuery",
+        "options": {
+          "queryReplacement": "={{ [String($json.query?.DOMAIN ?? '')] }}"
+        },
+        "query": "SELECT json_build_object(\n  'domain', lower($1),\n  'portal_ok', lower($1) = lower(regexp_replace((SELECT value FROM settings WHERE key = 'portal_url'), '^https?://|/.*$', '', 'g')),\n  'app', (SELECT row_to_json(x) FROM (SELECT status, installed_at FROM b24_app WHERE domain = lower($1)) x)) AS st"
+      },
+      "position": [
+        220,
+        560
+      ],
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6
     },
     {
       "id": "0f6a8699-fec4-595b-ad24-0205c688a206",
@@ -274,7 +444,7 @@
         "jsCode": "// Bitrix24 opens the install path with POST: AUTH_ID, AUTH_EXPIRES, REFRESH_ID, APPLICATION_TOKEN,\n// member_id, SERVER_ENDPOINT, status (body) and DOMAIN, PROTOCOL, LANG, APP_SID (query).\nconst b = $json.body ?? {}, q = $json.query ?? {};\nconst v = (k) => b[k] ?? q[k] ?? null;\nreturn [{ json: { auth_id: v('AUTH_ID'), refresh_id: v('REFRESH_ID'), expires: Number(v('AUTH_EXPIRES') ?? 3600),\n                  application_token: v('APPLICATION_TOKEN'), member_id: v('member_id'), domain: String(v('DOMAIN') ?? '').toLowerCase(),\n                  server_endpoint: v('SERVER_ENDPOINT'), scope: v('APPLICATION_SCOPE') } }];\n"
       },
       "position": [
-        220,
+        440,
         300
       ],
       "type": "n8n-nodes-base.code",
@@ -328,6 +498,40 @@
       "typeVersion": 2.2
     },
     {
+      "id": "fb2fc90c-4cb4-52f9-882a-86e9751596e9",
+      "name": "Respond event 200",
+      "parameters": {
+        "options": {
+          "responseCode": 200
+        },
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: true }) }}"
+      },
+      "position": [
+        880,
+        100
+      ],
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4
+    },
+    {
+      "id": "486149a0-67ec-56a5-a612-608504e77892",
+      "name": "Respond event 403",
+      "parameters": {
+        "options": {
+          "responseCode": 403
+        },
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: false }) }}"
+      },
+      "position": [
+        880,
+        220
+      ],
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4
+    },
+    {
       "id": "ba3c584e-611f-55b3-a6e5-f10304d85c24",
       "name": "Respond failed",
       "parameters": {
@@ -378,6 +582,31 @@
       "typeVersion": 1.4
     },
     {
+      "id": "1fed2cc4-75d2-5094-b0fb-22761554c8c6",
+      "name": "Respond status",
+      "parameters": {
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "text/html; charset=utf-8"
+              }
+            ]
+          }
+        },
+        "respondWith": "text",
+        "responseBody": "={{ $json.html }}"
+      },
+      "position": [
+        660,
+        560
+      ],
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4
+    },
+    {
       "credentials": {
         "postgres": {
           "name": "B24HUB Postgres"
@@ -400,6 +629,19 @@
       "typeVersion": 2.6
     },
     {
+      "id": "f76d4f9f-614a-5183-b25e-fcd10e1aff96",
+      "name": "Status page",
+      "parameters": {
+        "jsCode": "const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\"/g, '&quot;');\n\n// No tokens on GET, so nothing is changed on the server. If the server-side setup is stored but Bitrix24\n// still reports the app as not installed (installFinish never reached the portal), the page finishes it;\n// an already installed app only gets the status, installFinish is not called again.\nconst st = $json.st;\nlet body, script = '';\nif (!st.portal_ok) body = '<h1>Портал не обслуживается этой интеграцией</h1>';\nelse if (!st.app || st.app.status !== 'installed') body = '<h1>Приложение ещё не установлено</h1><p class=\"muted\">Откройте его под администратором портала: установка выполнится автоматически.</p>';\nelse {\n  body = `<h1>b24-lead-hub установлен</h1><p class=\"muted\">Портал ${esc(st.domain)}, настройка выполнена ${esc(new Date(st.app.installed_at).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' }))} (МСК).</p><p id=\"st\" class=\"muted\">Проверяем статус в Битрикс24…</p>`;\n  script = \"<script src=\\\"https://api.bitrix24.com/api/v1/\\\"></script>\" + \"<script>BX24.init(function(){BX24.callMethod('app.info',{},function(r){var el=document.getElementById('st');\"\n    + \"if(r.error()){el.textContent='Статус в Битрикс24 недоступен: '+r.error();return;}\"\n    + \"if(r.data().INSTALLED){el.textContent='Установка завершена, приложение работает.';}\"\n    + \"else{el.textContent='Завершаем установку…';BX24.installFinish();}});});</script>\";\n}\nreturn [{ json: { html: `<!doctype html><html><head><meta charset=\"utf-8\"><title>b24-lead-hub</title><style>body{font:14px/1.45 -apple-system,Segoe UI,Roboto,sans-serif;color:#1f2933;margin:16px;background:#fff}h1{font-size:18px;margin:0 0 4px}h2{font-size:15px;margin:20px 0 8px}.muted{color:#6b7785}table{border-collapse:collapse;width:100%}td,th{border-bottom:1px solid #e6e9ee;padding:6px 8px;text-align:left;vertical-align:top}th{font-weight:600;color:#52606d;font-size:12px;text-transform:uppercase;letter-spacing:.03em}.b{display:inline-block;padding:2px 8px;border-radius:10px;font-size:12px;font-weight:600}.ok{background:#e3f6ea;color:#16794c}.bad{background:#fde8e8;color:#b42318}.wait{background:#fff4e0;color:#a15c00}.kpi{display:inline-block;margin:0 24px 8px 0}.kpi b{display:block;font-size:22px}code{font-size:12px}</style></head><body>${body}${script}</body></html>` } }];\n"
+      },
+      "position": [
+        440,
+        560
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
       "id": "b82a2664-987f-5fbb-ae26-dfd3935a07cd",
       "name": "Success page",
       "parameters": {
@@ -411,6 +653,28 @@
       ],
       "type": "n8n-nodes-base.code",
       "typeVersion": 2
+    },
+    {
+      "credentials": {
+        "postgres": {
+          "name": "B24HUB Postgres"
+        }
+      },
+      "id": "ca19767e-bea1-550a-a279-3d6c5aa076f3",
+      "name": "Verify event token",
+      "parameters": {
+        "operation": "executeQuery",
+        "options": {
+          "queryReplacement": "={{ [$json.body?.auth?.application_token ?? $json.body?.['auth[application_token]'] ?? '', $json.body?.auth?.member_id ?? $json.body?.['auth[member_id]'] ?? '', String($json.body.event)] }}"
+        },
+        "query": "SELECT EXISTS (SELECT 1 FROM b24_app WHERE status = 'installed'\n  AND application_token = $1 AND member_id = $2) AS valid, $3 AS event"
+      },
+      "position": [
+        440,
+        160
+      ],
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6
     }
   ],
   "settings": {
