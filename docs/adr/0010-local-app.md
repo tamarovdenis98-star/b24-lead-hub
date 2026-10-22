@@ -36,3 +36,16 @@ Install without params / with a fake `AUTH_ID` / from a foreign portal → 403, 
 (`invalid_token` came back from the portal for the fake token). Tab, app page, robot and uninstall without
 an installed app → 403. The webhook path of `lib b24_call` still works. The tab HTML was rendered locally
 from the real journal of deal 42.
+
+## Amendment (stage 4, after the first real installs)
+- **Bitrix24 re-keys the app after `installFinish`.** The `APPLICATION_TOKEN` / tokens posted to the install page
+  became invalid (`APPLICATION_NOT_FOUND`); the current ones came in ONAPPINSTALL and on every page open.
+  ONAPPINSTALL / ONAPPUPDATE are therefore authenticated by their own `access_token` (`app.info` on our portal,
+  same `member_id`), not by comparison with the stored token, and then re-key `b24_app`.
+- **Verified page opens re-sync the keys:** the current `APPLICATION_TOKEN` is stored; an admin's token pair
+  replaces the stored one.
+- **Setup is a library** (`[B24HUB] lib app_setup`, stored OAuth tokens): it runs after ONAPPINSTALL / ONAPPUPDATE,
+  when an admin opens the app and the stored setup belongs to another app code (re-created app, e.g. without
+  "app completes installation itself"), and on demand (`90 test harness`, `{"setup": true}`).
+- **Reverse proxy:** n8n's `CSP: sandbox` and `CORP: same-origin` are overridden for `/` and `/webhook/b24hub/app*`
+  only (docs/runbook.md).

@@ -175,3 +175,13 @@ None of the requests to `04` came from Bitrix24 while the form was saving.
 | `GET /` | CORP same-origin, XFO SAMEORIGIN | CORP cross-origin, XFO SAMEORIGIN |
 | `/webhook/b24hub/app*` (GET/POST) | GET 404; CSP sandbox | 200 / 403 by auth; CSP `frame-ancestors https://*.bitrix24.ru`, CORP cross-origin |
 | `/signin`, `/home/*`, other webhooks | — | unchanged |
+
+### Re-created app (2026-10-22)
+| Check | Result | Execution |
+|---|---|---|
+| stored token after the app was re-created | `APPLICATION_NOT_FOUND`; re-synced on the next admin page open (app ID 4, `INSTALLED: true`) | 9823 |
+| `lib app_setup` for the new app | robot `b24hub_inn_check`, tab CRM_DEAL_DETAIL_TAB, events ONCRMDEALUPDATE / ONAPPUNINSTALL bound | 9842 |
+| OAuth refresh (token aged by hand) | refreshed with the new client_id / secret (`refresh_count` 1, +60 min); next call used it without refreshing | 9849, 9852 |
+| real ONCRMDEALUPDATE via the app subscription (`Bitrix24 Webhook Engine`) | deal 794 moved to PREPARATION → SLA `met`, closed by the event 2 s later | 9866 |
+| same event with a foreign `application_token` (likely the previous app instance) | 403 | 9865 |
+| fake ONAPPINSTALL / foreign portal / wrong event token / fake viewer | 403, stored keys unchanged | — |
