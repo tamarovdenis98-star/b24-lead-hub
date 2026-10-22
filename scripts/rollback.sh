@@ -13,6 +13,6 @@ mkdir -p "$TMP/workflows"
 for f in $(git ls-tree --name-only "$REF" workflows/); do
   git show "$REF:$f" > "$TMP/$f"
 done
-PY=$(command -v python3 || command -v python)
+PY=python3; "$PY" -c '' 2>/dev/null || PY=python   # Windows: python3 may be a Store stub
 "$PY" scripts/n8n_sync.py deploy "$TMP"/workflows/*.json
 echo "deployed workflows from $REF ($(git rev-parse --short "$REF")) in $(( $(date +%s) - T0 )) s"
