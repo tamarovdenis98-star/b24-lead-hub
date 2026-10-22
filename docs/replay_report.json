@@ -1,10 +1,10 @@
 {
-  "run_id": "r1021a",
-  "started_utc": "2026-10-21 11:04",
+  "run_id": "r1022a",
+  "started_utc": "2026-10-22 09:33",
   "requests": 500,
   "kinds": {
-    "duplicate": 100,
     "unique": 350,
+    "duplicate": 100,
     "invalid_schema": 25,
     "invalid_data": 25
   },
@@ -15,9 +15,9 @@
   "intake_new": 375,
   "intake_duplicate": 100,
   "intake_latency_ms": {
-    "p50": 2942,
-    "p95": 4542,
-    "max": 19041
+    "p50": 4574,
+    "p95": 8100,
+    "max": 13896
   },
   "inbox_rows": 375,
   "expected_rows": 375,
@@ -28,44 +28,46 @@
   "leads_retried": 0,
   "repaired": 0,
   "time_to_crm_s": {
-    "p50": 242.3,
-    "p95": 377.6,
-    "max": 551.7
+    "p50": 348.1,
+    "p95": 491.8,
+    "max": 744.0
   },
-  "send_s": 202.0,
-  "wall_s": 611.2,
+  "send_s": 298.6,
+  "wall_s": 790.3,
   "crm": {
     "deals": 350,
     "duplicate_deals": 0,
     "duplicate_contacts": 0,
     "duplicate_companies": 0,
     "deals_missing_in_crm": 0,
-    "contacts_total": 319,
-    "companies_total": 85
+    "contacts_total": 362,
+    "companies_total": 83,
+    "links_ok": 350,
+    "link_problems": {}
   },
   "routing": {
     "by_manager": {
-      "16": 116,
+      "16": 117,
       "20": 117,
-      "18": 117
+      "18": 116
     },
-    "own_client_rule": 101
+    "own_client_rule": 117
   },
   "b24": {
-    "calls": 700,
+    "calls": 930,
     "retries": 0,
     "limit_hits": {},
     "errors": {}
   },
   "dadata": {
-    "calls": 85,
-    "cache_hits": 81
+    "calls": 65,
+    "cache_hits": 102
   },
   "errors_logged": 0,
   "rates": {
-    "arrival_per_s": 1.91,
-    "processing_per_s": 0.62,
-    "b24_calls_per_s": 1.23,
-    "b24_avg_ms": 716
+    "arrival_per_s": 1.28,
+    "processing_per_s": 0.46,
+    "b24_calls_per_s": 1.22,
+    "b24_avg_ms": 659
   }
 }

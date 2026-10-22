@@ -79,7 +79,6 @@ batch through n8n then linked contact, company and SLA item correctly (harness e
 The 40 deals kept for screenshots were repaired with `check_crm_links.py --fix` (40/40 ok).
 The replay will be re-run with the link check in stage 5.
 
-<!-- replay:start -->
 ## Stage 2 — load replay `r1021a` (2026-10-21 11:04 UTC)
 
 `python scripts/replay_load.py` → 500 requests through the public intake
@@ -110,7 +109,6 @@ Where the time to CRM goes: leads arrived at 1.91/s and were processed at
 0.62/s (1.23 Bitrix24 calls/s against the 2/s throttle; average call
 716 ms). So the p95 is mostly **queue wait** behind a burst, and the bottleneck is sequential
 per-worker processing on 1 vCPU, not the Bitrix24 limit.
-<!-- replay:end -->
 
 ## Stage 3 — SLA watcher and Bitrix24 events (2026-10-21)
 
@@ -196,3 +194,57 @@ None of the requests to `04` came from Bitrix24 while the form was saving.
 
 Earlier "robot never called" attempts were not the integration: the robot was not saved, then sat in a
 stage sequence behind demo «Пауза робота» robots (delayed 2–3 days). Moved to the top of the stage, it ran at once.
+
+<!-- replay:start -->
+## Load replay `r1022a` (2026-10-22 09:33 UTC)
+
+`python scripts/replay_load.py` → 500 requests through the public intake
+(concurrency 8, from a laptop over the internet): 350 unique, 100 resends
+of earlier requests (20%), 50 invalid (10%: half fail the schema, half carry unusable contacts).
+
+| Metric | Value |
+|---|---|
+| **Duplicate deals in CRM** | **0** |
+| **Duplicate contacts in CRM** (same phone/e-mail) | **0** |
+| Duplicate companies (same INN) | 0 |
+| **CRM links correct** (deal → contact / company, SLA item → deal) | **350 of 350**  |
+| Processed (done + rejected) / accepted | **100.0%** (350 + 25 of 375; expected rows 375) |
+| Failed (no attempts left) | 0 |
+| Intake answers | 375 new, 100 duplicate, HTTP {200: 475, 422: 25} |
+| Intake latency | p50 4574 ms, p95 8100 ms |
+| Time from intake to deal+task+SLA in CRM | p50 348.1 s, **p95 491.8 s**, max 744.0 s |
+| Bitrix24 REST calls (batch counts as 1) | 930 |
+| Retries on limits (`QUERY_LIMIT_EXCEEDED` / `OPERATION_TIME_LIMIT`) | 0  |
+| All Bitrix24 retries / non-ok responses | 0 / 0 |
+| Leads retried / repaired after partial create | 0 / 0 |
+| Routing: deals per manager / "own client" rule | {'16': 117, '20': 117, '18': 116} / 117 |
+| DaData calls / cache hits | 65 / 102 |
+| Deals created in this run / missing in CRM | 350 / 0 |
+| Errors logged by error handler during the run | 0 |
+| Wall time (send + process) | 790.3 s |
+
+Where the time to CRM goes: leads arrived at 1.28/s and were processed at
+0.46/s (1.22 Bitrix24 calls/s against the 2/s throttle; average call
+659 ms). So the p95 is mostly **queue wait** behind a burst, and the bottleneck is sequential
+per-worker processing on 1 vCPU, not the Bitrix24 limit.
+<!-- replay:end -->
+
+### Notes on replay `r1022a` (stage 5)
+- Run with the CRM link check added after the stage-2 defect: **350 of 350 deals correctly linked**.
+- Memory incident during the run: with a growing backlog the overlapping ticks of `02 process` multiplied
+  parallel workers, and n8n reached **947 MB of its 1 GB limit** (11:37 MSK, load average 3.2). `02 process` was
+  deactivated for ~2.5 min (intake kept accepting; nothing was lost, no OOM, no restart), then redeployed with
+  `process_max_in_flight = 20` (sql/011): during the rest of the drain n8n stayed at 480–650 MB with ≤11 leads in flight.
+  This pause is included in the time-to-CRM numbers of this run; intake latency here (p50 4.6 s) reflects a saturated
+  1 vCPU while 8 clients were sending.
+- Bitrix24 calls (930) include the deal poller and the deal-event handler, not only the two batches per lead.
+- The watcher was in dry-run mode during the run (350 open SLAs would otherwise have tripped the breaker).
+
+## Stage 5 — tests, CI, dashboard, rollback (2026-10-22)
+| Check | Result |
+|---|---|
+| pytest | **124 passed**: 59 on the JavaScript of the deployed Code nodes run under node (normalization, INN in both copies vs an independent Python implementation on 1,200 generated INNs), 12 on Postgres with the SQL taken from the workflow nodes (30 parallel identical intakes → 1 row, SKIP LOCKED claims disjoint, backoff and max attempts, in-flight cap, `route_lead` idempotent and balanced, client locks and expiry, 500 ms throttle slots, SLA closed once, watcher cannot overwrite a closed SLA), 53 policy checks (Retry On Fail without On Error = continue on every external call, error workflow everywhere, portal only through `lib b24_call`, webhook auth, no secrets) |
+| CI | gitleaks over full history + the same 124 tests on Postgres brought up by `docker-compose.yml` (the quick-start path) — green |
+| rollback drill | `./scripts/rollback.sh 5d4c580` (before the in-flight cap): **45 s**, `02 process` in n8n without the cap; `./scripts/rollback.sh HEAD`: **43 s**, cap back; 17 workflows active, export identical to git |
+| smoke after the drill | demo lead → 200 in 725 ms, resend → `duplicate: true`; deal 1498 with contact, task, SLA item, comment in **5 s**; company found by INN instead of being created |
+| Grafana | 11.2.2, read-only role without access to tokens, 80 MB steady (limit 220 MB), screenshot `demo/grafana.png` taken through an SSH tunnel |
