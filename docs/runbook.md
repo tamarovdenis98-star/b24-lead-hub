@@ -1,11 +1,22 @@
 # Runbook
 
-> Stage 2 draft. Incident procedures ("rollback in 5 minutes") are completed in stage 5.
+## Rollback in 5 minutes
+| Situation | Action | Effect |
+|---|---|---|
+| A new workflow version misbehaves | `./scripts/rollback.sh <last good commit>` | all workflows redeployed from git (time measured: see results.md) |
+| Processing creates bad data in CRM | deactivate `[B24HUB] 02 process` (n8n UI or `POST /api/v1/workflows/<id>/deactivate`) | intake keeps accepting into `inbox`, nothing is lost; resume = activate |
+| Escalations go wrong | `UPDATE settings SET value = 'true' WHERE key = 'sla_watch_dry_run'` | watcher only counts, sends nothing |
+| Bitrix24 is down / rate-limited | nothing | lib retries with backoff; failed leads retry 1/2/4/8 min; inbox buffers |
+| A bad migration | migrations are additive; fix forward with a new `sql/NNN_*.sql` | older workflows keep working on the newer schema |
+
+After a rollback: `./scripts/export_workflows.sh`, commit the state that runs in n8n.
 
 ## Deploy / update
 ```bash
 # on the VPS
 cd /opt/b24-lead-hub && git pull --ff-only
+# optional dashboard (read-only, 127.0.0.1:3000; ssh -L 3000:127.0.0.1:3000 <host>)
+docker compose -f docker-compose.yml -f docker-compose.vps.yml --profile dashboard up -d grafana
 docker compose -f docker-compose.yml -f docker-compose.vps.yml run --rm migrate
 ./scripts/seed_config.sh
 # from a machine with N8N_URL / N8N_API_KEY
