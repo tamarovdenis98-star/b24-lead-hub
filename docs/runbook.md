@@ -79,3 +79,10 @@ The editor (`/signin`, `/home/...`) keeps `same-origin` / `SAMEORIGIN`; other we
 After editing a bind-mounted Caddyfile check that the container sees it
 (`docker exec app-caddy-1 grep -c b24hub /etc/caddy/Caddyfile`): an editor that replaces the file
 leaves the container on the old inode, and `caddy reload` then silently reloads the old config.
+
+## The INN robot does not run
+1. Is a request arriving at all? `05a robot inn check` executions / `SELECT * FROM robot_runs ORDER BY id DESC`.
+2. If not: deal card → «Бизнес-процессы» → journal of «Шаблон автоматизации (<stage>)». If the robot is not in the
+   journal, it waits in a sequence behind another robot (e.g. «Пауза робота») — put it first in the stage column.
+3. Two apps with the same name leave two identical robots in the picker; a robot of a not-installed app is never
+   called. Keep one app; `lib app_setup` re-registers the robot for the installed one.

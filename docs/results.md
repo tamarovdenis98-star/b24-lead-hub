@@ -185,3 +185,14 @@ None of the requests to `04` came from Bitrix24 while the form was saving.
 | real ONCRMDEALUPDATE via the app subscription (`Bitrix24 Webhook Engine`) | deal 794 moved to PREPARATION → SLA `met`, closed by the event 2 s later | 9866 |
 | same event with a foreign `application_token` (likely the previous app instance) | 403 | 9865 |
 | fake ONAPPINSTALL / foreign portal / wrong event token / fake viewer | 403, stored keys unchanged | — |
+
+### Clean re-install and the INN robot, live (2026-10-22)
+| Check | Result | Execution |
+|---|---|---|
+| install with "app completes installation itself" (after the proxy fix) | `INSTALLED: true` on the first open; robot, tab, ONCRMDEALUPDATE / ONAPPUNINSTALL registered | 10123, 10142 |
+| robot «Проверить контрагента по ИНН (DaData)», deal 100 → «Подготовка документов» | called by `Bitrix24 Webhook Engine` within 2 s; token ok → 200 → INN checksum → DaData (cache) → `bizproc.event.send` ok, attempt 1 | 10219 |
+| values returned to the business process | CHECK_RESULT `active`, ПАО СБЕРБАНК, KPP 773601001, OGRN 1027700132195, IS_ACTIVE Y | robot_runs #1 |
+| deal journal (tab «Интеграция») | `robot_inn_check` row written for deal 100 | — |
+
+Earlier "robot never called" attempts were not the integration: the robot was not saved, then sat in a
+stage sequence behind demo «Пауза робота» robots (delayed 2–3 days). Moved to the top of the stage, it ran at once.
