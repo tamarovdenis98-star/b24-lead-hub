@@ -68,6 +68,13 @@
         [
           {
             "index": 0,
+            "node": "Respond bootstrap",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
             "node": "Parse",
             "type": "main"
           }
@@ -236,6 +243,31 @@
       "typeVersion": 1.4
     },
     {
+      "id": "01a1a809-17ea-5a6e-87ca-627c6e0345e1",
+      "name": "Respond bootstrap",
+      "parameters": {
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "text/html; charset=utf-8"
+              }
+            ]
+          }
+        },
+        "respondWith": "text",
+        "responseBody": "<!doctype html><html><head><meta charset=\"utf-8\"><title>b24-lead-hub</title><style>body{font:14px/1.45 -apple-system,Segoe UI,Roboto,sans-serif;color:#1f2933;margin:16px;background:#fff}h1{font-size:18px;margin:0 0 4px}h2{font-size:15px;margin:20px 0 8px}.muted{color:#6b7785}table{border-collapse:collapse;width:100%}td,th{border-bottom:1px solid #e6e9ee;padding:6px 8px;text-align:left;vertical-align:top}th{font-weight:600;color:#52606d;font-size:12px;text-transform:uppercase;letter-spacing:.03em}.b{display:inline-block;padding:2px 8px;border-radius:10px;font-size:12px;font-weight:600}.ok{background:#e3f6ea;color:#16794c}.bad{background:#fde8e8;color:#b42318}.wait{background:#fff4e0;color:#a15c00}.kpi{display:inline-block;margin:0 24px 8px 0}.kpi b{display:block;font-size:22px}code{font-size:12px}</style></head><body><p id=\"m\" class=\"muted\">Загрузка…</p><form id=\"f\" method=\"POST\"><input type=\"hidden\" name=\"AUTH_ID\"><input type=\"hidden\" name=\"member_id\"><input type=\"hidden\" name=\"PLACEMENT\"><input type=\"hidden\" name=\"PLACEMENT_OPTIONS\"></form><script src=\"https://api.bitrix24.com/api/v1/\"></script><script>var done=false;BX24.init(function(){var a=BX24.getAuth()||{};var p=BX24.placement&&BX24.placement.info?BX24.placement.info():{};var f=document.getElementById('f');f.AUTH_ID.value=a.access_token||'';f.member_id.value=a.member_id||'';f.PLACEMENT.value=p.placement||'';f.PLACEMENT_OPTIONS.value=JSON.stringify(p.options||{});f.action=location.href;done=true;f.submit();});setTimeout(function(){if(!done)document.getElementById('m').textContent='Откройте эту страницу из Битрикс24.';},6000);</script></body></html>"
+      },
+      "position": [
+        220,
+        560
+      ],
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4
+    },
+    {
       "id": "1540f0e7-52d9-58f4-8125-4545ce3c60df",
       "name": "Respond tab",
       "parameters": {
@@ -264,7 +296,11 @@
       "id": "5440b4bc-d177-55ff-a510-2605754acbb3",
       "name": "Tab opened",
       "parameters": {
-        "httpMethod": "POST",
+        "httpMethod": [
+          "GET",
+          "POST"
+        ],
+        "multipleMethods": true,
         "options": {},
         "path": "b24hub/app/tab",
         "responseMode": "responseNode"
