@@ -19,12 +19,26 @@ jobs:
       - name: project-specific export checks
         run: python3 scripts/check_exports.py
 
-  lint:
+  tests:
     runs-on: ubuntu-latest
+    env:
+      TEST_PG_DSN: postgresql://b24hub_owner:change-me-owner@127.0.0.1:55432/b24hub
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
       - name: scripts compile
         run: python -m py_compile scripts/*.py
+      - name: install test dependencies
+        run: pip install -r requirements-dev.txt
+      - name: postgres + migrations from docker-compose.yml (the quick start path)
+        run: |
+          cp .env.example .env
+          docker compose up -d postgres
+          docker compose run --rm migrate
+      - name: pytest (workflow JavaScript under node, SQL on Postgres, workflow policy)
+        run: python -m pytest -v
