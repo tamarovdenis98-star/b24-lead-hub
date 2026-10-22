@@ -48,6 +48,24 @@
         ]
       ]
     },
+    "Needs setup?": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Prepare setup",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Summary",
+            "type": "main"
+          }
+        ]
+      ]
+    },
     "Parse": {
       "main": [
         [
@@ -59,12 +77,45 @@
         ]
       ]
     },
+    "Prepare setup": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Run app setup",
+            "type": "main"
+          }
+        ]
+      ]
+    },
     "Render": {
       "main": [
         [
           {
             "index": 0,
             "node": "Respond page",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Resync app keys": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Needs setup?",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Run app setup": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Summary",
             "type": "main"
           }
         ]
@@ -97,7 +148,7 @@
         [
           {
             "index": 0,
-            "node": "Summary",
+            "node": "Resync app keys",
             "type": "main"
           }
         ],
@@ -191,14 +242,61 @@
       "typeVersion": 2.6
     },
     {
+      "id": "eefbad07-f532-5e6d-8108-c4c1f45908f2",
+      "name": "Needs setup?",
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "99c3442f-5e52-5e9d-8339-03462b8427fd",
+              "leftValue": "={{ $json.needs_setup === true }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        1320,
+        300
+      ],
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2
+    },
+    {
       "id": "3c6c5773-e8e1-503e-9fe8-478a9c047602",
       "name": "Parse",
       "parameters": {
-        "jsCode": "// Placement / app page: POST AUTH_ID, member_id, PLACEMENT, PLACEMENT_OPTIONS (JSON string); DOMAIN in the query.\nconst b = $json.body ?? {}, q = $json.query ?? {};\nlet opts = {};\ntry { opts = typeof b.PLACEMENT_OPTIONS === 'string' ? JSON.parse(b.PLACEMENT_OPTIONS) : (b.PLACEMENT_OPTIONS ?? {}); } catch { opts = {}; }\nreturn [{ json: { auth_id: b.AUTH_ID ?? null, member_id: b.member_id ?? null, domain: String(q.DOMAIN ?? b.DOMAIN ?? '').toLowerCase(),\n                  placement: b.PLACEMENT ?? null, deal_id: Number(opts.ID) || null } }];\n"
+        "jsCode": "// Placement / app page: POST AUTH_ID, member_id, PLACEMENT, PLACEMENT_OPTIONS (JSON string); DOMAIN in the query.\nconst b = $json.body ?? {}, q = $json.query ?? {};\nlet opts = {};\ntry { opts = typeof b.PLACEMENT_OPTIONS === 'string' ? JSON.parse(b.PLACEMENT_OPTIONS) : (b.PLACEMENT_OPTIONS ?? {}); } catch { opts = {}; }\nreturn [{ json: { auth_id: b.AUTH_ID ?? null, refresh_id: b.REFRESH_ID ?? null, expires: Number(b.AUTH_EXPIRES ?? 3600),\n                  app_token: b.APPLICATION_TOKEN ?? null, member_id: b.member_id ?? null,\n                  domain: String(q.DOMAIN ?? b.DOMAIN ?? '').toLowerCase(), placement: b.PLACEMENT ?? null, deal_id: Number(opts.ID) || null } }];\n"
       },
       "position": [
         220,
         300
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "id": "4b07449b-c163-51e0-9e18-7e36802890c6",
+      "name": "Prepare setup",
+      "parameters": {
+        "jsCode": "return [{ json: { reason: 'admin opened the app, setup belonged to another app' } }];\n"
+      },
+      "position": [
+        1540,
+        380
       ],
       "type": "n8n-nodes-base.code",
       "typeVersion": 2
@@ -297,6 +395,50 @@
           "name": "B24HUB Postgres"
         }
       },
+      "id": "39687b6a-ba1d-59a3-87e7-70ef256e6bb3",
+      "name": "Resync app keys",
+      "parameters": {
+        "operation": "executeQuery",
+        "options": {
+          "queryReplacement": "={{ [$('Parse').first().json.member_id, $('Parse').first().json.domain, $('Parse').first().json.app_token ?? '', $json.body.result.result.profile?.ADMIN === true, $('Parse').first().json.auth_id ?? '', $('Parse').first().json.refresh_id ?? '', $('Parse').first().json.expires ?? 3600, $json.body.result.result.info?.CODE ?? ''] }}"
+        },
+        "query": "UPDATE b24_app SET\n       application_token = coalesce(nullif($3, ''), application_token),\n       access_token  = CASE WHEN $4::boolean AND $5 <> '' THEN $5 ELSE access_token END,\n       refresh_token = CASE WHEN $4::boolean AND $6 <> '' THEN $6 ELSE refresh_token END,\n       expires_at    = CASE WHEN $4::boolean AND $5 <> '' THEN now() + make_interval(secs => $7::int) ELSE expires_at END,\n       updated_at = now()\n WHERE member_id = $1 AND domain = $2 AND status = 'installed'\nRETURNING member_id,\n          $4::boolean AND (install_report->'app'->>'code') IS DISTINCT FROM $8 AS needs_setup"
+      },
+      "position": [
+        1320,
+        120
+      ],
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6
+    },
+    {
+      "id": "b0818da5-d571-518a-8bb9-dd34dfe8f39f",
+      "name": "Run app setup",
+      "parameters": {
+        "mode": "each",
+        "options": {
+          "waitForSubWorkflow": true
+        },
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "@name:[B24HUB] lib app_setup"
+        }
+      },
+      "position": [
+        1760,
+        380
+      ],
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1
+    },
+    {
+      "credentials": {
+        "postgres": {
+          "name": "B24HUB Postgres"
+        }
+      },
       "id": "9fb08e21-b02e-5abf-ab99-7a011e205166",
       "name": "Summary",
       "parameters": {
@@ -305,7 +447,7 @@
         "query": "SELECT json_build_object(\n  'leads_24h', (SELECT count(*) FROM inbox WHERE received_at > now() - interval '24 hours'),\n  'by_status', (SELECT coalesce(json_object_agg(status, n), '{}') FROM (SELECT status, count(*) n FROM inbox GROUP BY 1) x),\n  'sla', (SELECT coalesce(json_object_agg(sla_status, n), '{}') FROM (SELECT sla_status, count(*) n FROM assignments GROUP BY 1) x),\n  'open_overdue', (SELECT count(*) FROM assignments WHERE sla_status = 'open' AND sla_due < now()),\n  'errors_24h', (SELECT count(*) FROM errors WHERE occurred_at > now() - interval '24 hours'),\n  'b24_calls_1h', (SELECT count(*) FROM b24_call_log WHERE called_at > now() - interval '1 hour'),\n  'limit_hits_24h', (SELECT count(*) FROM b24_call_log WHERE called_at > now() - interval '24 hours' AND error_code IN ('QUERY_LIMIT_EXCEEDED','OPERATION_TIME_LIMIT')),\n  'robot_runs_24h', (SELECT count(*) FROM robot_runs WHERE at > now() - interval '24 hours'),\n  'last_errors', (SELECT coalesce(json_agg(e), '[]') FROM (SELECT occurred_at, workflow_name, node_name, left(error_message, 160) AS message FROM errors ORDER BY id DESC LIMIT 5) e)\n) AS s"
       },
       "position": [
-        1320,
+        1980,
         120
       ],
       "type": "n8n-nodes-base.postgres",
@@ -316,7 +458,7 @@
       "maxTries": 3,
       "name": "Verify AUTH_ID",
       "parameters": {
-        "jsonBody": "={{ JSON.stringify({ auth: $json.r.auth_id }) }}",
+        "jsonBody": "={{ JSON.stringify({ auth: $json.r.auth_id, halt: 0, cmd: { info: 'app.info', profile: 'profile' } }) }}",
         "method": "POST",
         "options": {
           "response": {
@@ -329,7 +471,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "url": "={{ 'https://' + $json.r.domain + '/rest/app.info.json' }}"
+        "url": "={{ 'https://' + $json.r.domain + '/rest/batch.json' }}"
       },
       "position": [
         880,
@@ -349,7 +491,7 @@
           "conditions": [
             {
               "id": "2ba03a42-34f5-5fde-b737-d76edf4a55d3",
-              "leftValue": "={{ !!$json.body?.result?.ID }}",
+              "leftValue": "={{ !!$json.body?.result?.result?.info?.ID }}",
               "operator": {
                 "operation": "true",
                 "singleValue": true,

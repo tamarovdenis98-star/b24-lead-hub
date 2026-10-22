@@ -63,6 +63,17 @@
         ]
       ]
     },
+    "Resync app keys": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Deal journal",
+            "type": "main"
+          }
+        ]
+      ]
+    },
     "Tab opened": {
       "main": [
         [
@@ -97,7 +108,7 @@
         [
           {
             "index": 0,
-            "node": "Deal journal",
+            "node": "Resync app keys",
             "type": "main"
           }
         ],
@@ -195,7 +206,7 @@
       "id": "2bdb0110-e3d6-511c-bd1f-4af328dd77bc",
       "name": "Parse",
       "parameters": {
-        "jsCode": "// Placement / app page: POST AUTH_ID, member_id, PLACEMENT, PLACEMENT_OPTIONS (JSON string); DOMAIN in the query.\nconst b = $json.body ?? {}, q = $json.query ?? {};\nlet opts = {};\ntry { opts = typeof b.PLACEMENT_OPTIONS === 'string' ? JSON.parse(b.PLACEMENT_OPTIONS) : (b.PLACEMENT_OPTIONS ?? {}); } catch { opts = {}; }\nreturn [{ json: { auth_id: b.AUTH_ID ?? null, member_id: b.member_id ?? null, domain: String(q.DOMAIN ?? b.DOMAIN ?? '').toLowerCase(),\n                  placement: b.PLACEMENT ?? null, deal_id: Number(opts.ID) || null } }];\n"
+        "jsCode": "// Placement / app page: POST AUTH_ID, member_id, PLACEMENT, PLACEMENT_OPTIONS (JSON string); DOMAIN in the query.\nconst b = $json.body ?? {}, q = $json.query ?? {};\nlet opts = {};\ntry { opts = typeof b.PLACEMENT_OPTIONS === 'string' ? JSON.parse(b.PLACEMENT_OPTIONS) : (b.PLACEMENT_OPTIONS ?? {}); } catch { opts = {}; }\nreturn [{ json: { auth_id: b.AUTH_ID ?? null, refresh_id: b.REFRESH_ID ?? null, expires: Number(b.AUTH_EXPIRES ?? 3600),\n                  app_token: b.APPLICATION_TOKEN ?? null, member_id: b.member_id ?? null,\n                  domain: String(q.DOMAIN ?? b.DOMAIN ?? '').toLowerCase(), placement: b.PLACEMENT ?? null, deal_id: Number(opts.ID) || null } }];\n"
       },
       "position": [
         220,
@@ -293,6 +304,28 @@
       "typeVersion": 1.4
     },
     {
+      "credentials": {
+        "postgres": {
+          "name": "B24HUB Postgres"
+        }
+      },
+      "id": "cdab1135-dcad-541b-bda4-f00199003cf0",
+      "name": "Resync app keys",
+      "parameters": {
+        "operation": "executeQuery",
+        "options": {
+          "queryReplacement": "={{ [$('Parse').first().json.member_id, $('Parse').first().json.domain, $('Parse').first().json.app_token ?? '', $json.body.result.result.profile?.ADMIN === true, $('Parse').first().json.auth_id ?? '', $('Parse').first().json.refresh_id ?? '', $('Parse').first().json.expires ?? 3600, $json.body.result.result.info?.CODE ?? ''] }}"
+        },
+        "query": "UPDATE b24_app SET\n       application_token = coalesce(nullif($3, ''), application_token),\n       access_token  = CASE WHEN $4::boolean AND $5 <> '' THEN $5 ELSE access_token END,\n       refresh_token = CASE WHEN $4::boolean AND $6 <> '' THEN $6 ELSE refresh_token END,\n       expires_at    = CASE WHEN $4::boolean AND $5 <> '' THEN now() + make_interval(secs => $7::int) ELSE expires_at END,\n       updated_at = now()\n WHERE member_id = $1 AND domain = $2 AND status = 'installed'\nRETURNING member_id,\n          $4::boolean AND (install_report->'app'->>'code') IS DISTINCT FROM $8 AS needs_setup"
+      },
+      "position": [
+        1320,
+        120
+      ],
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6
+    },
+    {
       "id": "5440b4bc-d177-55ff-a510-2605754acbb3",
       "name": "Tab opened",
       "parameters": {
@@ -318,7 +351,7 @@
       "maxTries": 3,
       "name": "Verify AUTH_ID",
       "parameters": {
-        "jsonBody": "={{ JSON.stringify({ auth: $json.r.auth_id }) }}",
+        "jsonBody": "={{ JSON.stringify({ auth: $json.r.auth_id, halt: 0, cmd: { info: 'app.info', profile: 'profile' } }) }}",
         "method": "POST",
         "options": {
           "response": {
@@ -331,7 +364,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "url": "={{ 'https://' + $json.r.domain + '/rest/app.info.json' }}"
+        "url": "={{ 'https://' + $json.r.domain + '/rest/batch.json' }}"
       },
       "position": [
         880,
@@ -351,7 +384,7 @@
           "conditions": [
             {
               "id": "b6fce17c-0598-5afc-861b-854d5e97112a",
-              "leftValue": "={{ !!$json.body?.result?.ID }}",
+              "leftValue": "={{ !!$json.body?.result?.result?.info?.ID }}",
               "operator": {
                 "operation": "true",
                 "singleValue": true,
